@@ -45,6 +45,7 @@ FetchContent_MakeAvailable(Catch2)
 add_library(drumming_core STATIC
     src/midi.cpp
     src/types.cpp
+    src/geometry.cpp
 )
 target_include_directories(drumming_core PUBLIC include)
 target_link_libraries(drumming_core PUBLIC
@@ -58,7 +59,6 @@ add_executable(drum_viz
     src/main.cpp
     src/audio.cpp
     src/draw.cpp
-    src/geometry.cpp
 )
 target_include_directories(drum_viz PRIVATE include)
 target_link_libraries(drum_viz PRIVATE
@@ -74,7 +74,7 @@ add_executable(drums_in tools/drums_in.cpp)
 target_link_libraries(drums_in PRIVATE rtmidi)
 
 # ── tests ─────────────────────────────────────────────────────────────────────
-add_executable(drumming_tests tests/test_midi.cpp)
+add_executable(drumming_tests tests/test_midi.cpp tests/test_geometry.cpp)
 target_link_libraries(drumming_tests PRIVATE drumming_core Catch2::Catch2WithMain)
 
 include(Catch)

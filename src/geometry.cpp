@@ -28,4 +28,4 @@ std::pair<int, int> pickCell(sf::Vector2f p, int total) {
     return {step, bestVi};
 }
 
-} // namespace drumming
+}
