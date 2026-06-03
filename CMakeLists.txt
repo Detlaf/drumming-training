@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.60)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 project(drumming_training CXX)
 
 set(CMAKE_CXX_STANDARD 17)
