@@ -7,16 +7,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ── RtMidi (bundled) ──────────────────────────────────────────────────────────
 add_library(rtmidi STATIC third_party/rtmidi/RtMidi.cpp)
 target_include_directories(rtmidi PUBLIC third_party/rtmidi)
-target_compile_definitions(rtmidi PUBLIC __MACOSX_CORE__)
-target_link_libraries(rtmidi PUBLIC
-    "-framework CoreMIDI"
-    "-framework CoreAudio"
-    "-framework CoreFoundation"
-)
+
+if(APPLE)
+    target_compile_definitions(rtmidi PUBLIC __MACOSX_CORE__)
+    target_link_libraries(rtmidi PUBLIC
+        "-framework CoreMIDI"
+        "-framework CoreAudio"
+        "-framework CoreFoundation"
+    )
+elseif(UNIX)
+    target_compile_definitions(rtmidi PUBLIC __LINUX_ALSA__)
+    target_link_libraries(rtmidi PUBLIC asound pthread)
+endif()
 
 # ── SFML ─────────────────────────────────────────────────────────────────────
-set(SFML_DIR "/opt/homebrew/Cellar/sfml/3.0.2/lib/cmake/SFML")
-find_package(SFML 3 COMPONENTS Graphics Window Audio System REQUIRED)
+include(FetchContent)
+FetchContent_Declare(
+    SFML
+    GIT_REPOSITORY https://github.com/SFML/SFML.git
+    GIT_TAG        3.0.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(SFML)
 
 # ── drum_viz ─────────────────────────────────────────────────────────────────
 add_executable(drum_viz
