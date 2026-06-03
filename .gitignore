@@ -38,6 +38,8 @@
 *.exe
 *.out
 *.app
+drum_viz
+drums_in
 
 # Build directories
 build/

@@ -6,18 +6,27 @@ An application that captures data from the e-drumming kit and visualizes it on t
 
 ### macOS
 
-Compile:
+Build:
 
 ```bash
-g++ -D__MACOSX_CORE__ -o connect connect.cpp RtMidi.cpp -framework CoreMIDI -framework CoreAudio -framework CoreFoundation
+cmake -S . -B build
+cmake --build build
 ```
 
 Run:
 
 ```bash
-./connect
+./build/drum_viz
 ```
 
-### Test sequence 1
+### Controls
 
-Snare -> Hi tom -> Mid tom -> Low tom
+| Key | Action |
+|-----|--------|
+| Click on staff | Add / remove a note |
+| Space | Toggle Edit / Play mode |
+| `+` / `-` | BPM up / down (5 BPM steps) |
+| `M` / `N` | Add / remove a measure |
+| `C` | Clear groove |
+
+In **Play** mode a metronome click fires on each beat (high pitch on beat 1 of each measure). The playhead sweeps the groove; incoming MIDI hits are scored green (correct, within ±80 ms) or red (wrong pad or mistimed).
