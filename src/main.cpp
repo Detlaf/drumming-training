@@ -8,6 +8,7 @@
 #include <RtMidi.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 
 int main() {
@@ -23,7 +24,10 @@ int main() {
     window.setFramerateLimit(60);
 
     sf::Font font;
-    font.openFromFile("/System/Library/Fonts/Helvetica.ttc");
+    if (!font.openFromFile("/System/Library/Fonts/Helvetica.ttc")) {
+        std::cerr << "Failed to load font\n";
+        return 1;
+    }
 
     sf::SoundBuffer hiClickBuf = drumming::makeClick(1100.f);
     sf::SoundBuffer loClickBuf = drumming::makeClick(700.f);
