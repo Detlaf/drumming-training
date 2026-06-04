@@ -3,6 +3,7 @@
 #include <chrono>
 #include <map>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 #include "drumming/constants.h"
@@ -33,7 +34,7 @@ struct KitPad {
 extern const KitPad KIT_PADS[];
 extern const int    NUM_KIT_PADS;
 
-enum class Mode { EDIT, PLAY };
+enum class Screen { HOME, LIBRARY, STATS, EDITOR, PLAY };
 
 struct HitResult {
     int   step, voice;
@@ -46,8 +47,23 @@ struct MidiEv {
     std::chrono::steady_clock::time_point time;
 };
 
+struct SavedGroove {
+    std::string name;
+    int bpm, measures;
+    std::set<std::pair<int,int>> groove;
+};
+
+struct SessionRecord {
+    std::string grooveName;
+    int bpm, measures;
+    int correctHits, totalNotes;
+    float accuracyPct;
+    long long timestampEpoch;
+    int durationSecs;
+};
+
 struct App {
-    Mode mode     = Mode::EDIT;
+    Screen screen = Screen::HOME;
     int  bpm      = 100;
     int  measures = 2;
 
@@ -61,6 +77,18 @@ struct App {
 
     std::map<int, std::chrono::steady_clock::time_point> lastHit;
     std::map<int, int> lastVel;
+
+    // Library & session history
+    std::vector<SavedGroove>   library;
+    std::vector<SessionRecord> history;
+    std::string currentGrooveName;
+    bool sessionActive = false;
+    std::chrono::steady_clock::time_point sessionStart;
+    int libraryScroll = 0;
+
+    // Groove naming overlay
+    bool        namingMode = false;
+    std::string nameBuffer;
 
     int   totalSteps() const { return measures * STEPS_PER_MEASURE; }
     float stepDurMs()  const { return 60000.f / bpm / STEPS_PER_BEAT; }

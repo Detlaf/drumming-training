@@ -59,6 +59,7 @@ add_executable(drum_viz
     src/main.cpp
     src/audio.cpp
     src/draw.cpp
+    src/persistence.cpp
 )
 target_include_directories(drum_viz PRIVATE include)
 target_link_libraries(drum_viz PRIVATE
