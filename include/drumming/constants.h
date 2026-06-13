@@ -6,6 +6,11 @@ namespace drumming {
 inline constexpr unsigned WINDOW_W = 1200;
 inline constexpr unsigned WINDOW_H = 780;
 
+// Supersampling factor: the scene is rendered to an off-screen target this many
+// times larger than the window, then downsampled. Sharpens edges and text on
+// standard-DPI displays and adds anti-aliasing everywhere.
+inline constexpr unsigned RENDER_SCALE = 2;
+
 // Chrome
 inline constexpr float SIDEBAR_W      = 210.f;
 inline constexpr float TITLEBAR_H     = 40.f;

@@ -69,6 +69,27 @@ int main() {
         "Drumming");
     window.setFramerateLimit(60);
 
+    // Supersampled off-screen target: the UI is drawn at RENDER_SCALE× into
+    // `scene` (with anti-aliasing) and then downsampled into the window for
+    // crisper edges and text. Its view keeps logical window coordinates so all
+    // drawing code is unchanged.
+    const unsigned scale = drumming::RENDER_SCALE;
+    const sf::Vector2u sceneSize{drumming::WINDOW_W * scale, drumming::WINDOW_H * scale};
+    sf::RenderTexture scene;
+    bool sceneReady = false;
+    for (unsigned aa : {8u, 4u, 0u}) {  // fall back if the GPU caps anti-aliasing
+        sf::ContextSettings sceneSettings;
+        sceneSettings.antiAliasingLevel = aa;
+        if (scene.resize(sceneSize, sceneSettings)) { sceneReady = true; break; }
+    }
+    if (!sceneReady) {
+        std::cerr << "Failed to create render target\n";
+        return 1;
+    }
+    scene.setSmooth(true);
+    scene.setView(sf::View(sf::FloatRect(
+        {0.f, 0.f}, {(float)drumming::WINDOW_W, (float)drumming::WINDOW_H})));
+
     sf::Font font;
     if (!font.openFromFile("/System/Library/Fonts/Helvetica.ttc")) {
         std::cerr << "Failed to load font\n";
@@ -378,32 +399,39 @@ int main() {
         }
 
         // ── Render ──────────────────────────────────────────────────────────
-        window.clear(sf::Color(247, 247, 248));
+        scene.clear(sf::Color(247, 247, 248));
 
         // Chrome — always on top of everything
-        drumming::drawTitleBar(window, font);
-        drumming::drawSidebar(window, font, g);
-        drumming::drawContentHeader(window, font, g);
+        drumming::drawTitleBar(scene, font);
+        drumming::drawSidebar(scene, font, g);
+        drumming::drawContentHeader(scene, font, g);
 
         switch (g.screen) {
         case drumming::Screen::HOME:
-            drumming::drawHomeScreen(window, font, g);
+            drumming::drawHomeScreen(scene, font, g);
             break;
         case drumming::Screen::LIBRARY:
-            drumming::drawLibraryScreen(window, font, g);
+            drumming::drawLibraryScreen(scene, font, g);
             break;
         case drumming::Screen::STATS:
-            drumming::drawStatsScreen(window, font, g);
+            drumming::drawStatsScreen(scene, font, g);
             break;
         case drumming::Screen::EDITOR:
         case drumming::Screen::PLAY:
-            drumming::drawPracticeView(window, font, g);
+            drumming::drawPracticeView(scene, font, g);
             break;
         }
 
         if (g.namingMode)
-            drumming::drawNamingOverlay(window, font, g);
+            drumming::drawNamingOverlay(scene, font, g);
 
+        scene.display();
+
+        // Downsample the supersampled scene into the window.
+        window.clear(sf::Color(247, 247, 248));
+        sf::Sprite sceneSprite(scene.getTexture());
+        sceneSprite.setScale({1.f / scale, 1.f / scale});
+        window.draw(sceneSprite);
         window.display();
     }
 

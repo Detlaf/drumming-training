@@ -23,14 +23,14 @@ static const sf::Color WARN_C {200, 160, 50 };
 static const sf::Color BAD_C  {200, 70,  60 };
 
 // ── Draw helpers ──────────────────────────────────────────────────────────────
-static void fillRect(sf::RenderWindow& w, float x, float y, float wd, float ht, sf::Color c) {
+static void fillRect(sf::RenderTarget& w, float x, float y, float wd, float ht, sf::Color c) {
     sf::RectangleShape r({wd, ht});
     r.setPosition({x, y});
     r.setFillColor(c);
     w.draw(r);
 }
 
-static void strokeRect(sf::RenderWindow& w, float x, float y, float wd, float ht, sf::Color c, float thick = 1.f) {
+static void strokeRect(sf::RenderTarget& w, float x, float y, float wd, float ht, sf::Color c, float thick = 1.f) {
     sf::RectangleShape r({wd - thick, ht - thick});
     r.setPosition({x + thick / 2.f, y + thick / 2.f});
     r.setFillColor(sf::Color::Transparent);
@@ -39,39 +39,46 @@ static void strokeRect(sf::RenderWindow& w, float x, float y, float wd, float ht
     w.draw(r);
 }
 
-static void hline(sf::RenderWindow& w, float x1, float x2, float y, sf::Color c) {
+static void hline(sf::RenderTarget& w, float x1, float x2, float y, sf::Color c) {
     sf::RectangleShape r({x2 - x1, 1.f});
     r.setPosition({x1, y});
     r.setFillColor(c);
     w.draw(r);
 }
 
-static void vline(sf::RenderWindow& w, float x, float y1, float y2, sf::Color c) {
+static void vline(sf::RenderTarget& w, float x, float y1, float y2, sf::Color c) {
     sf::RectangleShape r({1.f, y2 - y1});
     r.setPosition({x, y1});
     r.setFillColor(c);
     w.draw(r);
 }
 
-static void drawText(sf::RenderWindow& w, const sf::Font& font, const std::string& s,
+// Text is rasterized at RENDER_SCALE× the requested size and scaled back down,
+// so glyphs are sampled from a high-resolution atlas — crisp once the scene is
+// downsampled to the window. Layout stays in logical (unscaled) coordinates.
+static void drawText(sf::RenderTarget& w, const sf::Font& font, const std::string& s,
                      float x, float y, unsigned sz, sf::Color c) {
-    sf::Text t(font, s, sz);
+    sf::Text t(font, s, sz * RENDER_SCALE);
+    t.setScale({1.f / RENDER_SCALE, 1.f / RENDER_SCALE});
     t.setFillColor(c);
     t.setPosition({x, y});
     w.draw(t);
 }
 
-static void drawTextCenter(sf::RenderWindow& w, const sf::Font& font, const std::string& s,
+static void drawTextCenter(sf::RenderTarget& w, const sf::Font& font, const std::string& s,
                            float cx, float y, unsigned sz, sf::Color c) {
-    sf::Text t(font, s, sz);
+    sf::Text t(font, s, sz * RENDER_SCALE);
+    t.setScale({1.f / RENDER_SCALE, 1.f / RENDER_SCALE});
     t.setFillColor(c);
     auto b = t.getLocalBounds();
-    t.setPosition({cx - b.size.x / 2.f - b.position.x, y});
+    // Bounds are in the oversized glyph space; scale back to logical units.
+    const float k = 1.f / RENDER_SCALE;
+    t.setPosition({cx - (b.size.x / 2.f + b.position.x) * k, y});
     w.draw(t);
 }
 
 // ── drawNote ──────────────────────────────────────────────────────────────────
-void drawNote(sf::RenderWindow& w, float x, float y, const Voice& v, sf::Color c) {
+void drawNote(sf::RenderTarget& w, float x, float y, const Voice& v, sf::Color c) {
     const float R = 5.f;
     if (v.xHead) {
         float d = R * 0.85f;
@@ -132,7 +139,7 @@ void drawNote(sf::RenderWindow& w, float x, float y, const Voice& v, sf::Color c
 }
 
 // ── drawStaff ─────────────────────────────────────────────────────────────────
-void drawStaff(sf::RenderWindow& w, const sf::Font& font, const App& app, int total) {
+void drawStaff(sf::RenderTarget& w, const sf::Font& font, const App& app, int total) {
     // 5 staff lines
     for (int l = 0; l < 5; ++l) {
         float y = STAFF_TOP_Y + l * LINE_SP;
@@ -176,7 +183,7 @@ void drawStaff(sf::RenderWindow& w, const sf::Font& font, const App& app, int to
 }
 
 // ── drawGroove ────────────────────────────────────────────────────────────────
-void drawGroove(sf::RenderWindow& w, const App& app, int total) {
+void drawGroove(sf::RenderTarget& w, const App& app, int total) {
     float cellW = (STAFF_RIGHT - STAFF_LEFT) / total;
     for (auto& [step, vi] : app.groove) {
         float x = STAFF_LEFT + (step + 0.5f) * cellW;
@@ -185,7 +192,7 @@ void drawGroove(sf::RenderWindow& w, const App& app, int total) {
 }
 
 // ── drawPlayhead ──────────────────────────────────────────────────────────────
-void drawPlayhead(sf::RenderWindow& w, const App& app) {
+void drawPlayhead(sf::RenderTarget& w, const App& app) {
     if (app.currentStep < 0) return;
     float x   = stepX(app.currentStep, app.totalSteps());
     float top = STAFF_TOP_Y - 40.f;
@@ -194,7 +201,7 @@ void drawPlayhead(sf::RenderWindow& w, const App& app) {
 }
 
 // ── drawResults ───────────────────────────────────────────────────────────────
-void drawResults(sf::RenderWindow& w, const App& app, int total) {
+void drawResults(sf::RenderTarget& w, const App& app, int total) {
     float cellW = (STAFF_RIGHT - STAFF_LEFT) / total;
     for (auto& r : app.results) {
         float     x = STAFF_LEFT + (r.step + 0.5f) * cellW;
@@ -213,7 +220,7 @@ void drawResults(sf::RenderWindow& w, const App& app, int total) {
 // ── drawGrid ────────────────────────────────────────────────────────────────
 // Step sequencer aligned beneath the staff: one row per voice, one cell per
 // 16th-note step. Replaces the old physical-kit panel with the design's grid.
-void drawGrid(sf::RenderWindow& w, const sf::Font& font, const App& app, int total) {
+void drawGrid(sf::RenderTarget& w, const sf::Font& font, const App& app, int total) {
     float cellW = (STAFF_RIGHT - STAFF_LEFT) / total;
     float pad   = 2.f;
 
@@ -260,7 +267,7 @@ void drawGrid(sf::RenderWindow& w, const sf::Font& font, const App& app, int tot
 }
 
 // pill — small rounded-ish chip with a label; returns its width.
-static float pill(sf::RenderWindow& w, const sf::Font& font, float x, float y,
+static float pill(sf::RenderTarget& w, const sf::Font& font, float x, float y,
                   const std::string& s, sf::Color border = LINE_C, sf::Color ink = INK2) {
     sf::Text t(font, s, 12);
     float tw = t.getLocalBounds().size.x;
@@ -272,7 +279,7 @@ static float pill(sf::RenderWindow& w, const sf::Font& font, float x, float y,
 }
 
 // accChip — coloured dot + label + value, for the live-accuracy strip.
-static float accChip(sf::RenderWindow& w, const sf::Font& font, float x, float y,
+static float accChip(sf::RenderTarget& w, const sf::Font& font, float x, float y,
                      const std::string& label, int pct, sf::Color c) {
     sf::CircleShape dot(4.f);
     dot.setOrigin({4.f, 4.f});
@@ -288,7 +295,7 @@ static float accChip(sf::RenderWindow& w, const sf::Font& font, float x, float y
 }
 
 // ── drawControls ──────────────────────────────────────────────────────────────
-void drawControls(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawControls(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float y  = CTRL_Y;
     float x  = CARD_X;
 
@@ -332,7 +339,7 @@ void drawControls(sf::RenderWindow& w, const sf::Font& font, const App& app) {
 // ── drawPracticeView ──────────────────────────────────────────────────────────
 // Composite editor/play layout: a staff card above a grid-sequencer card,
 // matching the design's split-view editor.
-void drawPracticeView(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawPracticeView(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     int total = app.totalSteps();
 
     // Card backgrounds
@@ -358,7 +365,7 @@ void drawPracticeView(sf::RenderWindow& w, const sf::Font& font, const App& app)
 }
 
 // ── drawTitleBar ──────────────────────────────────────────────────────────────
-void drawTitleBar(sf::RenderWindow& w, const sf::Font& font) {
+void drawTitleBar(sf::RenderTarget& w, const sf::Font& font) {
     fillRect(w, 0, 0, (float)WINDOW_W, TITLEBAR_H, BG2);
     hline(w, 0, (float)WINDOW_W, TITLEBAR_H - 1.f, HAIR_C);
 
@@ -381,7 +388,7 @@ void drawTitleBar(sf::RenderWindow& w, const sf::Font& font) {
 }
 
 // ── drawSidebar ───────────────────────────────────────────────────────────────
-void drawSidebar(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawSidebar(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float sbTop = TITLEBAR_H;
     float sbH   = (float)WINDOW_H - sbTop;
 
@@ -436,7 +443,7 @@ void drawSidebar(sf::RenderWindow& w, const sf::Font& font, const App& app) {
 }
 
 // ── drawContentHeader ─────────────────────────────────────────────────────────
-void drawContentHeader(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawContentHeader(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float x  = SIDEBAR_W;
     float y  = TITLEBAR_H;
     float wd = (float)WINDOW_W - x;
@@ -468,7 +475,7 @@ void drawContentHeader(sf::RenderWindow& w, const sf::Font& font, const App& app
 }
 
 // ── drawHomeScreen ────────────────────────────────────────────────────────────
-void drawHomeScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawHomeScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float cx = SIDEBAR_W + 26.f;
     float cy = TITLEBAR_H + CONTENT_HEAD_H + 22.f;
     float cw = (float)WINDOW_W - SIDEBAR_W - 52.f;
@@ -521,7 +528,7 @@ void drawHomeScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) {
 }
 
 // ── drawLibraryScreen ─────────────────────────────────────────────────────────
-void drawLibraryScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawLibraryScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float cx = SIDEBAR_W;
     float cy = TITLEBAR_H + CONTENT_HEAD_H;
     float cw = (float)WINDOW_W - SIDEBAR_W;
@@ -592,7 +599,7 @@ void drawLibraryScreen(sf::RenderWindow& w, const sf::Font& font, const App& app
 }
 
 // ── drawStatsScreen ───────────────────────────────────────────────────────────
-void drawStatsScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawStatsScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float cx = SIDEBAR_W + 26.f;
     float cy = TITLEBAR_H + CONTENT_HEAD_H + 14.f;
     float cw = (float)WINDOW_W - SIDEBAR_W - 52.f;
@@ -685,7 +692,7 @@ void drawStatsScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) 
 }
 
 // ── drawNamingOverlay ─────────────────────────────────────────────────────────
-void drawNamingOverlay(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+void drawNamingOverlay(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     sf::RectangleShape dim({(float)WINDOW_W, (float)WINDOW_H});
     dim.setFillColor({0, 0, 0, 110});
     w.draw(dim);
