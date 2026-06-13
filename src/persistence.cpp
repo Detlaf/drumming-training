@@ -1,106 +1,196 @@
 #include "drumming/persistence.h"
-#include <algorithm>
+#include <sqlite3.h>
+#include <cstdio>
 #include <ctime>
-#include <fstream>
 #include <sstream>
+#include <string>
 
 namespace drumming {
 
-static std::vector<std::string> splitTokens(const std::string& s) {
-    std::istringstream iss(s);
-    std::vector<std::string> out;
+// ── Database connection ──────────────────────────────────────────────────────
+// A single lazily-opened connection lives for the lifetime of the process.
+// The schema is created on first open. Two tables:
+//
+//   grooves   one row per saved groove; the step/voice pairs are serialised
+//             into the `notes` column as space-separated "step,voice" tokens
+//             so a groove stays a single row.
+//
+//   sessions  one row per practiced session.
+
+static const char* kDbPath = "drumming.db";
+
+static const char* kSchema =
+    "CREATE TABLE IF NOT EXISTS grooves ("
+    "  id         INTEGER PRIMARY KEY,"
+    "  name       TEXT    NOT NULL UNIQUE,"
+    "  bpm        INTEGER NOT NULL DEFAULT 100,"
+    "  measures   INTEGER NOT NULL DEFAULT 2,"
+    "  notes      TEXT    NOT NULL DEFAULT '',"
+    "  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
+    ");"
+    "CREATE TABLE IF NOT EXISTS sessions ("
+    "  id            INTEGER PRIMARY KEY,"
+    "  groove_name   TEXT    NOT NULL,"
+    "  bpm           INTEGER NOT NULL,"
+    "  measures      INTEGER NOT NULL,"
+    "  correct_hits  INTEGER NOT NULL,"
+    "  total_notes   INTEGER NOT NULL,"
+    "  accuracy_pct  REAL    NOT NULL,"
+    "  played_at     INTEGER NOT NULL,"
+    "  duration_secs INTEGER NOT NULL"
+    ");"
+    "CREATE INDEX IF NOT EXISTS idx_sessions_groove   ON sessions(groove_name);"
+    "CREATE INDEX IF NOT EXISTS idx_sessions_playedat ON sessions(played_at);";
+
+static sqlite3* db() {
+    static sqlite3* handle = nullptr;
+    if (handle) return handle;
+
+    if (sqlite3_open(kDbPath, &handle) != SQLITE_OK) {
+        std::fprintf(stderr, "sqlite: cannot open %s: %s\n",
+                     kDbPath, sqlite3_errmsg(handle));
+        sqlite3_close(handle);
+        handle = nullptr;
+        return nullptr;
+    }
+
+    char* err = nullptr;
+    if (sqlite3_exec(handle, kSchema, nullptr, nullptr, &err) != SQLITE_OK) {
+        std::fprintf(stderr, "sqlite: schema error: %s\n", err ? err : "?");
+        sqlite3_free(err);
+    }
+
+    return handle;
+}
+
+// ── Notes (de)serialisation ──────────────────────────────────────────────────
+static std::string serialiseNotes(const std::set<std::pair<int, int>>& g) {
+    std::ostringstream os;
+    bool first = true;
+    for (auto& [s, v] : g) {
+        if (!first) os << ' ';
+        os << s << ',' << v;
+        first = false;
+    }
+    return os.str();
+}
+
+static std::set<std::pair<int, int>> deserialiseNotes(const std::string& s) {
+    std::set<std::pair<int, int>> g;
+    std::istringstream is(s);
     std::string tok;
-    while (iss >> tok) out.push_back(tok);
-    return out;
+    while (is >> tok) {
+        auto comma = tok.find(',');
+        if (comma == std::string::npos) continue;
+        try {
+            g.insert({std::stoi(tok.substr(0, comma)),
+                      std::stoi(tok.substr(comma + 1))});
+        } catch (...) {}
+    }
+    return g;
 }
 
+// ── Grooves ──────────────────────────────────────────────────────────────────
 void loadGrooves(App& app) {
-    std::ifstream f("grooves.txt");
-    if (!f) return;
+    sqlite3* d = db();
+    if (!d) return;
 
-    std::string line;
-    SavedGroove cur;
-    bool inGroove = false;
+    sqlite3_stmt* st = nullptr;
+    const char* sql =
+        "SELECT name, bpm, measures, notes FROM grooves ORDER BY id;";
+    if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) != SQLITE_OK) return;
 
-    auto flush = [&] {
-        if (inGroove && !cur.name.empty()) { app.library.push_back(cur); cur = {}; }
-        inGroove = false;
-    };
-
-    while (std::getline(f, line)) {
-        if (line.empty() || line[0] == '#') { flush(); continue; }
-
-        if (line.size() > 5 && line.substr(0, 5) == "NAME ") {
-            flush();
-            cur.name = line.substr(5);
-            cur.bpm = 100; cur.measures = 2;
-            inGroove = true;
-        } else if (line.size() > 4 && line.substr(0, 4) == "BPM ") {
-            try { cur.bpm = std::stoi(line.substr(4)); } catch (...) {}
-        } else if (line.size() > 5 && line.substr(0, 5) == "BARS ") {
-            try { cur.measures = std::stoi(line.substr(5)); } catch (...) {}
-        } else if (line.size() >= 6 && line.substr(0, 6) == "NOTES ") {
-            for (auto& t : splitTokens(line.substr(6))) {
-                auto comma = t.find(',');
-                if (comma != std::string::npos) {
-                    try {
-                        cur.groove.insert({std::stoi(t.substr(0, comma)),
-                                           std::stoi(t.substr(comma + 1))});
-                    } catch (...) {}
-                }
-            }
-        } else if (line == "NOTES") {
-            // empty groove — no-op
-        }
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        SavedGroove g;
+        g.name     = reinterpret_cast<const char*>(sqlite3_column_text(st, 0));
+        g.bpm      = sqlite3_column_int(st, 1);
+        g.measures = sqlite3_column_int(st, 2);
+        const unsigned char* notes = sqlite3_column_text(st, 3);
+        g.groove = deserialiseNotes(notes ? reinterpret_cast<const char*>(notes) : "");
+        app.library.push_back(std::move(g));
     }
-    flush();
+    sqlite3_finalize(st);
 }
 
+// Full sync: the in-memory library is the source of truth, so we replace the
+// table contents inside a transaction. This mirrors the previous "rewrite the
+// whole file" behaviour and naturally handles adds, edits and deletes.
 void saveGrooves(const App& app) {
-    std::ofstream f("grooves.txt");
-    f << "# Drum Groove Library v1\n";
-    for (auto& g : app.library) {
-        f << "NAME " << g.name << "\n";
-        f << "BPM "  << g.bpm  << "\n";
-        f << "BARS " << g.measures << "\n";
-        f << "NOTES";
-        for (auto& [s, v] : g.groove) f << " " << s << "," << v;
-        f << "\n\n";
+    sqlite3* d = db();
+    if (!d) return;
+
+    sqlite3_exec(d, "BEGIN;", nullptr, nullptr, nullptr);
+    sqlite3_exec(d, "DELETE FROM grooves;", nullptr, nullptr, nullptr);
+
+    sqlite3_stmt* st = nullptr;
+    const char* sql =
+        "INSERT INTO grooves (name, bpm, measures, notes) VALUES (?,?,?,?);";
+    if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) == SQLITE_OK) {
+        for (auto& g : app.library) {
+            std::string notes = serialiseNotes(g.groove);
+            sqlite3_bind_text(st, 1, g.name.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_int (st, 2, g.bpm);
+            sqlite3_bind_int (st, 3, g.measures);
+            sqlite3_bind_text(st, 4, notes.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_step(st);
+            sqlite3_reset(st);
+        }
+        sqlite3_finalize(st);
     }
+
+    sqlite3_exec(d, "COMMIT;", nullptr, nullptr, nullptr);
 }
 
+// ── Sessions ─────────────────────────────────────────────────────────────────
 void loadHistory(App& app) {
-    std::ifstream f("history.txt");
-    if (!f) return;
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        std::istringstream iss(line);
+    sqlite3* d = db();
+    if (!d) return;
+
+    sqlite3_stmt* st = nullptr;
+    const char* sql =
+        "SELECT groove_name, bpm, measures, correct_hits, total_notes,"
+        "       accuracy_pct, played_at, duration_secs"
+        "  FROM sessions ORDER BY played_at;";
+    if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) != SQLITE_OK) return;
+
+    while (sqlite3_step(st) == SQLITE_ROW) {
         SessionRecord r{};
-        int accInt = 0;
-        iss >> r.timestampEpoch >> r.grooveName >> r.bpm >> r.measures
-            >> r.correctHits >> r.totalNotes >> accInt >> r.durationSecs;
-        r.accuracyPct = (float)accInt;
-        if (!r.grooveName.empty()) app.history.push_back(r);
+        r.grooveName     = reinterpret_cast<const char*>(sqlite3_column_text(st, 0));
+        r.bpm            = sqlite3_column_int(st, 1);
+        r.measures       = sqlite3_column_int(st, 2);
+        r.correctHits    = sqlite3_column_int(st, 3);
+        r.totalNotes     = sqlite3_column_int(st, 4);
+        r.accuracyPct    = (float)sqlite3_column_double(st, 5);
+        r.timestampEpoch = sqlite3_column_int64(st, 6);
+        r.durationSecs   = sqlite3_column_int(st, 7);
+        app.history.push_back(std::move(r));
     }
+    sqlite3_finalize(st);
 }
 
 void appendHistory(App& app, const SessionRecord& rec) {
     app.history.push_back(rec);
-    // Append to file; write header if file is new/empty
-    {
-        std::ifstream check("history.txt");
-        bool empty = !check || check.peek() == std::ifstream::traits_type::eof();
-        if (empty) {
-            std::ofstream hdr("history.txt");
-            hdr << "# Drum Session History v1\n";
-        }
-    }
-    std::ofstream f("history.txt", std::ios::app);
-    f << rec.timestampEpoch << "\t" << rec.grooveName << "\t"
-      << rec.bpm << "\t" << rec.measures << "\t"
-      << rec.correctHits << "\t" << rec.totalNotes << "\t"
-      << (int)rec.accuracyPct << "\t" << rec.durationSecs << "\n";
+
+    sqlite3* d = db();
+    if (!d) return;
+
+    sqlite3_stmt* st = nullptr;
+    const char* sql =
+        "INSERT INTO sessions (groove_name, bpm, measures, correct_hits,"
+        "  total_notes, accuracy_pct, played_at, duration_secs)"
+        " VALUES (?,?,?,?,?,?,?,?);";
+    if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) != SQLITE_OK) return;
+
+    sqlite3_bind_text  (st, 1, rec.grooveName.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int   (st, 2, rec.bpm);
+    sqlite3_bind_int   (st, 3, rec.measures);
+    sqlite3_bind_int   (st, 4, rec.correctHits);
+    sqlite3_bind_int   (st, 5, rec.totalNotes);
+    sqlite3_bind_double(st, 6, rec.accuracyPct);
+    sqlite3_bind_int64 (st, 7, rec.timestampEpoch);
+    sqlite3_bind_int   (st, 8, rec.durationSecs);
+    sqlite3_step(st);
+    sqlite3_finalize(st);
 }
 
 } // namespace drumming

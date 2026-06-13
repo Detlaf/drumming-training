@@ -41,6 +41,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
+# ── SQLite3 (system) ─────────────────────────────────────────────────────────
+find_package(SQLite3 REQUIRED)
+
 # ── drumming_core (shared between drum_viz and tests) ─────────────────────────
 add_library(drumming_core STATIC
     src/midi.cpp
@@ -68,6 +71,7 @@ target_link_libraries(drum_viz PRIVATE
     SFML::Window
     SFML::Audio
     SFML::System
+    SQLite::SQLite3
 )
 
 # ── drums_in (MIDI debug tool) ────────────────────────────────────────────────
