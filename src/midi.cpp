@@ -21,4 +21,10 @@ std::vector<MidiEv> pollMidi() {
     return evs;
 }
 
+MidiPortAction decideMidiAction(bool currentlyConnected, unsigned int portCount) {
+    if (!currentlyConnected && portCount > 0) return MidiPortAction::Open;
+    if (currentlyConnected  && portCount == 0) return MidiPortAction::Close;
+    return MidiPortAction::None;
+}
+
 } // namespace drumming

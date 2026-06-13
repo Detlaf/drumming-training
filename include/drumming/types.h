@@ -23,17 +23,6 @@ extern const int   NUM_VOICES;
 
 int voiceIndex(int midiNote);
 
-struct KitPad {
-    int          note;
-    const char*  name;
-    sf::Vector2f pos;
-    float        r;
-    sf::Color    col;
-};
-
-extern const KitPad KIT_PADS[];
-extern const int    NUM_KIT_PADS;
-
 enum class Screen { HOME, LIBRARY, STATS, EDITOR, PLAY };
 
 struct HitResult {
@@ -75,9 +64,6 @@ struct App {
     int loopCount     = 0;
     std::vector<HitResult> results;
 
-    std::map<int, std::chrono::steady_clock::time_point> lastHit;
-    std::map<int, int> lastVel;
-
     // Library & session history
     std::vector<SavedGroove>   library;
     std::vector<SessionRecord> history;
@@ -89,6 +75,8 @@ struct App {
     // Groove naming overlay
     bool        namingMode = false;
     std::string nameBuffer;
+
+    bool midiConnected = false;
 
     int   totalSteps() const { return measures * STEPS_PER_MEASURE; }
     float stepDurMs()  const { return 60000.f / bpm / STEPS_PER_BEAT; }

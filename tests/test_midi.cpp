@@ -97,15 +97,29 @@ TEST_CASE("pollMidi - multiple queued events returned in order", "[midi]") {
     CHECK(evs[2].note == 42);
 }
 
-// ── Pad lookup ────────────────────────────────────────────────────────────────
+// ── Hot-plug detection ──────────────────────────────────────────────────────────
 
-static const KitPad* findPad(int note) {
-    for (int i = 0; i < NUM_KIT_PADS; ++i)
-        if (KIT_PADS[i].note == note) return &KIT_PADS[i];
-    return nullptr;
+TEST_CASE("decideMidiAction - opens when a port appears while disconnected", "[midi][hotplug]") {
+    CHECK(decideMidiAction(/*currentlyConnected=*/false, /*portCount=*/1) == MidiPortAction::Open);
+    CHECK(decideMidiAction(false, 3) == MidiPortAction::Open);
 }
 
-TEST_CASE("KIT_PADS - note-on for snare resolves to Snare pad", "[midi][pads]") {
+TEST_CASE("decideMidiAction - closes when the last port disappears while connected", "[midi][hotplug]") {
+    CHECK(decideMidiAction(/*currentlyConnected=*/true, /*portCount=*/0) == MidiPortAction::Close);
+}
+
+TEST_CASE("decideMidiAction - no action when already connected and a port is present", "[midi][hotplug]") {
+    CHECK(decideMidiAction(true, 1) == MidiPortAction::None);
+    CHECK(decideMidiAction(true, 5) == MidiPortAction::None);
+}
+
+TEST_CASE("decideMidiAction - no action when disconnected and no ports", "[midi][hotplug]") {
+    CHECK(decideMidiAction(false, 0) == MidiPortAction::None);
+}
+
+// ── Voice lookup ──────────────────────────────────────────────────────────────
+
+TEST_CASE("VOICES - note-on for snare resolves to Snare voice", "[midi][voices]") {
     drain();
 
     std::vector<unsigned char> msg = makeMsg(0x90, 38, 100);
@@ -114,22 +128,22 @@ TEST_CASE("KIT_PADS - note-on for snare resolves to Snare pad", "[midi][pads]") 
     auto evs = pollMidi();
     REQUIRE(evs.size() == 1);
 
-    const KitPad* pad = findPad(evs[0].note);
-    REQUIRE(pad != nullptr);
-    CHECK(std::string(pad->name) == "Snare");
+    int vi = voiceIndex(evs[0].note);
+    REQUIRE(vi >= 0);
+    CHECK(std::string(VOICES[vi].name) == "Snare");
 }
 
-TEST_CASE("KIT_PADS - every KIT_PAD note is found exactly once", "[pads]") {
-    for (int i = 0; i < NUM_KIT_PADS; ++i) {
+TEST_CASE("VOICES - every voice note is found exactly once", "[voices]") {
+    for (int i = 0; i < NUM_VOICES; ++i) {
         int count = 0;
-        for (int j = 0; j < NUM_KIT_PADS; ++j)
-            if (KIT_PADS[j].note == KIT_PADS[i].note) ++count;
-        INFO("Duplicate note " << KIT_PADS[i].note << " (" << KIT_PADS[i].name << ")");
+        for (int j = 0; j < NUM_VOICES; ++j)
+            if (VOICES[j].midiNote == VOICES[i].midiNote) ++count;
+        INFO("Duplicate note " << VOICES[i].midiNote << " (" << VOICES[i].name << ")");
         CHECK(count == 1);
     }
 }
 
-TEST_CASE("KIT_PADS - known drum notes map to expected pad names", "[pads]") {
+TEST_CASE("VOICES - known drum notes map to expected voice names", "[voices]") {
     struct { int note; const char* name; } expected[] = {
         {36, "Bass"},
         {38, "Snare"},
@@ -142,14 +156,31 @@ TEST_CASE("KIT_PADS - known drum notes map to expected pad names", "[pads]") {
         {51, "Ride"},
     };
     for (auto& e : expected) {
-        const KitPad* pad = findPad(e.note);
+        int vi = voiceIndex(e.note);
         INFO("note " << e.note);
-        REQUIRE(pad != nullptr);
-        CHECK(std::string(pad->name) == e.name);
+        REQUIRE(vi >= 0);
+        CHECK(std::string(VOICES[vi].name) == e.name);
     }
 }
 
-TEST_CASE("KIT_PADS - unknown note returns null pad", "[pads]") {
-    CHECK(findPad(99) == nullptr);
-    CHECK(findPad(0)  == nullptr);
+TEST_CASE("VOICES - unknown note returns no voice", "[voices]") {
+    CHECK(voiceIndex(99) == -1);
+    CHECK(voiceIndex(0)  == -1);
+}
+
+TEST_CASE("VOICES - hi-hat articulations all resolve to the Hi-Hat lane", "[voices]") {
+    int hihat = voiceIndex(42); // closed (head)
+    REQUIRE(hihat >= 0);
+    CHECK(std::string(VOICES[hihat].name) == "Hi-Hat");
+
+    // Open (head) and edge variants must land on the same lane, not vanish.
+    CHECK(voiceIndex(46) == hihat); // open (head)
+    CHECK(voiceIndex(22) == hihat); // closed edge
+    CHECK(voiceIndex(26) == hihat); // open edge
+
+    // Foot-close pedal stays on its own lane.
+    int ped = voiceIndex(44);
+    REQUIRE(ped >= 0);
+    CHECK(std::string(VOICES[ped].name) == "HH Ped");
+    CHECK(ped != hihat);
 }

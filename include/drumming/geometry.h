@@ -8,5 +8,6 @@ namespace drumming {
 float voiceY(int vi);
 float stepX(int step, int total);
 std::pair<int, int> pickCell(sf::Vector2f p, int total);
+std::pair<int, int> pickGridCell(sf::Vector2f p, int total);
 
 } // namespace drumming

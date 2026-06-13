@@ -14,13 +14,18 @@ inline constexpr float CONTENT_HEAD_H = 52.f;
 // Staff layout (within content area, below chrome)
 inline constexpr float STAFF_LEFT  = SIDEBAR_W + 90.f;   // 300
 inline constexpr float STAFF_RIGHT = 1185.f;
-inline constexpr float STAFF_TOP_Y = TITLEBAR_H + CONTENT_HEAD_H + 38.f;  // 130
+inline constexpr float STAFF_TOP_Y = TITLEBAR_H + CONTENT_HEAD_H + 70.f;  // 162
 inline constexpr float LINE_SP     = 12.f;
 
-// Kit panel (below staff in editor/play screens)
-inline constexpr float KIT_Y  = 390.f;
-inline constexpr float KIT_H  = 290.f;
-inline constexpr float CTRL_Y = KIT_Y + KIT_H + 8.f;
+// Practice cards (staff + grid sequencer) in editor/play screens
+inline constexpr float CARD_X      = SIDEBAR_W + 12.f;          // 222
+inline constexpr float CARD_W      = (float)WINDOW_W - CARD_X - 12.f;
+inline constexpr float STAFF_CARD_Y = 96.f;
+inline constexpr float STAFF_CARD_H = 216.f;
+inline constexpr float GRID_CARD_Y  = STAFF_CARD_Y + STAFF_CARD_H + 14.f;  // 326
+inline constexpr float GRID_TOP     = GRID_CARD_Y + 26.f;       // first cell row (350)
+inline constexpr float GRID_ROW_H   = 28.f;
+inline constexpr float CTRL_Y       = 632.f;
 
 // Timing
 inline constexpr int   STEPS_PER_BEAT    = 4;

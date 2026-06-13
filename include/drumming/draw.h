@@ -10,8 +10,11 @@ void drawStaff(sf::RenderWindow& w, const sf::Font& font, const App& app, int to
 void drawGroove(sf::RenderWindow& w, const App& app, int total);
 void drawPlayhead(sf::RenderWindow& w, const App& app);
 void drawResults(sf::RenderWindow& w, const App& app, int total);
-void drawKit(sf::RenderWindow& w, const sf::Font& font, const App& app);
+void drawGrid(sf::RenderWindow& w, const sf::Font& font, const App& app, int total);
 void drawControls(sf::RenderWindow& w, const sf::Font& font, const App& app);
+
+// Editor/Play composite view (cards + staff + grid + controls)
+void drawPracticeView(sf::RenderWindow& w, const sf::Font& font, const App& app);
 
 // App chrome (always visible)
 void drawTitleBar(sf::RenderWindow& w, const sf::Font& font);

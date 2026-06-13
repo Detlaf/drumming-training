@@ -15,22 +15,26 @@ const Voice VOICES[] = {
 };
 const int NUM_VOICES = (int)(sizeof(VOICES) / sizeof(VOICES[0]));
 
-const KitPad KIT_PADS[] = {
-    {49, "Crash",   {150,  50}, 45, {227, 248,   8}},
-    {42, "Hi-Hat",  {280,  60}, 40, {227, 248,   8}},
-    {51, "Ride",    {630,  55}, 50, {227, 248,   8}},
-    {38, "Snare",   {230, 210}, 45, { 43, 187, 251}},
-    {48, "Hi Tom",  {430, 170}, 38, { 43, 187, 251}},
-    {45, "Mid Tom", {545, 190}, 38, { 43, 187, 251}},
-    {43, "Lo Tom",  {510, 300}, 42, { 43, 187, 251}},
-    {36, "Bass",    {360, 370}, 65, {160, 100, 200}},
-    {44, "HH Ped",  {160, 370}, 30, {200, 180,  60}},
-};
-const int NUM_KIT_PADS = (int)(sizeof(KIT_PADS) / sizeof(KIT_PADS[0]));
+// Electronic kits report the hi-hat on several note numbers depending on the
+// pedal position and strike zone. General MIDI uses 42 (closed) and 46 (open);
+// Roland/Alesis kits add edge variants 22 (closed edge) and 26 (open edge).
+// Collapse all of them onto the single Hi-Hat lane (note 42). Note 44
+// (foot-close pedal) keeps its own "HH Ped" lane.
+static int normalizeNote(int midiNote) {
+    switch (midiNote) {
+    case 22: // closed edge
+    case 26: // open edge
+    case 46: // open (head)
+        return 42;
+    default:
+        return midiNote;
+    }
+}
 
 int voiceIndex(int midiNote) {
+    int note = normalizeNote(midiNote);
     for (int i = 0; i < NUM_VOICES; ++i)
-        if (VOICES[i].midiNote == midiNote) return i;
+        if (VOICES[i].midiNote == note) return i;
     return -1;
 }
 

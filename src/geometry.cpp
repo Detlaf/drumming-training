@@ -28,4 +28,15 @@ std::pair<int, int> pickCell(sf::Vector2f p, int total) {
     return {step, bestVi};
 }
 
+std::pair<int, int> pickGridCell(sf::Vector2f p, int total) {
+    if (p.y < GRID_TOP || p.y >= GRID_TOP + NUM_VOICES * GRID_ROW_H) return {-1, -1};
+    if (p.x < STAFF_LEFT || p.x >= STAFF_RIGHT) return {-1, -1};
+
+    int vi   = (int)((p.y - GRID_TOP) / GRID_ROW_H);
+    float cw = (STAFF_RIGHT - STAFF_LEFT) / total;
+    int step = (int)((p.x - STAFF_LEFT) / cw);
+    if (vi < 0 || vi >= NUM_VOICES || step < 0 || step >= total) return {-1, -1};
+    return {step, vi};
+}
+
 }

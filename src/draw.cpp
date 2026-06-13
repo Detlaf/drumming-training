@@ -210,69 +210,151 @@ void drawResults(sf::RenderWindow& w, const App& app, int total) {
     }
 }
 
-// ── drawKit ───────────────────────────────────────────────────────────────────
-void drawKit(sf::RenderWindow& w, const sf::Font& font, const App& app) {
-    // Panel background (content area only)
-    fillRect(w, SIDEBAR_W, KIT_Y, (float)WINDOW_W - SIDEBAR_W, KIT_H, BG2);
-    hline(w, SIDEBAR_W, (float)WINDOW_W, KIT_Y, LINE_C);
+// ── drawGrid ────────────────────────────────────────────────────────────────
+// Step sequencer aligned beneath the staff: one row per voice, one cell per
+// 16th-note step. Replaces the old physical-kit panel with the design's grid.
+void drawGrid(sf::RenderWindow& w, const sf::Font& font, const App& app, int total) {
+    float cellW = (STAFF_RIGHT - STAFF_LEFT) / total;
+    float pad   = 2.f;
 
-    auto        now  = std::chrono::steady_clock::now();
-    const float FADE = 400.f;
+    int   playStep = (app.screen == Screen::PLAY) ? app.currentStep : -1;
 
-    for (int i = 0; i < NUM_KIT_PADS; ++i) {
-        const KitPad& p   = KIT_PADS[i];
-        sf::Vector2f  pos = {p.pos.x + SIDEBAR_W, p.pos.y + KIT_Y};
-        float         bright = 0.15f;
+    for (int vi = 0; vi < NUM_VOICES; ++vi) {
+        float ry = GRID_TOP + vi * GRID_ROW_H;
 
-        auto it = app.lastHit.find(p.note);
-        if (it != app.lastHit.end()) {
-            float ms = std::chrono::duration<float, std::milli>(now - it->second).count();
-            float t  = std::max(0.f, 1.f - ms / FADE);
-            auto  vi = app.lastVel.find(p.note);
-            float v  = vi != app.lastVel.end() ? vi->second / 127.f : 1.f;
-            bright   = 0.15f + 0.85f * t * v;
+        // Voice label in the gutter
+        drawText(w, font, VOICES[vi].name, SIDEBAR_W + 14.f, ry + GRID_ROW_H / 2.f - 7.f,
+                 10, INK2);
+
+        for (int s = 0; s < total; ++s) {
+            float cx        = STAFF_LEFT + s * cellW;
+            bool  on        = app.groove.count({s, vi}) > 0;
+            bool  beatStart = (s % STEPS_PER_BEAT == 0);
+            bool  underPlay = (s == playStep);
+
+            sf::Color fill = on ? INK : (beatStart ? BG3 : BG);
+            fillRect(w, cx + pad, ry + pad, cellW - 2.f * pad, GRID_ROW_H - 2.f * pad, fill);
+            strokeRect(w, cx + pad, ry + pad, cellW - 2.f * pad, GRID_ROW_H - 2.f * pad,
+                       on ? INK : LINE_C);
+
+            if (underPlay)
+                strokeRect(w, cx + pad, ry + pad, cellW - 2.f * pad, GRID_ROW_H - 2.f * pad,
+                           ACCENT, 1.5f);
+
+            if (on) {
+                float d = 4.f;
+                sf::CircleShape dot(d);
+                dot.setOrigin({d, d});
+                dot.setPosition({cx + cellW / 2.f, ry + GRID_ROW_H / 2.f});
+                dot.setFillColor(BG);
+                w.draw(dot);
+            }
         }
-
-        sf::Color c{(uint8_t)(p.col.r * bright),
-                    (uint8_t)(p.col.g * bright),
-                    (uint8_t)(p.col.b * bright)};
-        sf::CircleShape sh(p.r);
-        sh.setOrigin({p.r, p.r});
-        sh.setPosition(pos);
-        sh.setFillColor(c);
-        sh.setOutlineThickness(1.5f);
-        sh.setOutlineColor(LINE_C);
-        w.draw(sh);
-
-        drawText(w, font, p.name, pos.x - p.r, pos.y + p.r + 4.f, 10, INK3);
     }
+
+    // Beat numbers beneath the grid
+    float numY = GRID_TOP + NUM_VOICES * GRID_ROW_H + 4.f;
+    for (int s = 0; s < total; s += STEPS_PER_BEAT)
+        drawText(w, font, std::to_string(s / STEPS_PER_BEAT % BEATS_PER_MEASURE + 1),
+                 STAFF_LEFT + s * cellW + cellW / 2.f - 3.f, numY, 9, INK3);
+}
+
+// pill — small rounded-ish chip with a label; returns its width.
+static float pill(sf::RenderWindow& w, const sf::Font& font, float x, float y,
+                  const std::string& s, sf::Color border = LINE_C, sf::Color ink = INK2) {
+    sf::Text t(font, s, 12);
+    float tw = t.getLocalBounds().size.x;
+    float pw = tw + 22.f;
+    fillRect(w, x, y, pw, 24.f, BG);
+    strokeRect(w, x, y, pw, 24.f, border);
+    drawText(w, font, s, x + 11.f, y + 5.f, 12, ink);
+    return pw;
+}
+
+// accChip — coloured dot + label + value, for the live-accuracy strip.
+static float accChip(sf::RenderWindow& w, const sf::Font& font, float x, float y,
+                     const std::string& label, int pct, sf::Color c) {
+    sf::CircleShape dot(4.f);
+    dot.setOrigin({4.f, 4.f});
+    dot.setPosition({x + 4.f, y + 9.f});
+    dot.setFillColor(c);
+    w.draw(dot);
+    drawText(w, font, label, x + 14.f, y + 2.f, 12, INK2);
+    sf::Text lt(font, label, 12);
+    float lx = x + 14.f + lt.getLocalBounds().size.x + 8.f;
+    drawText(w, font, std::to_string(pct) + "%", lx, y + 2.f, 12, INK);
+    sf::Text vt(font, std::to_string(pct) + "%", 12);
+    return (lx + vt.getLocalBounds().size.x + 22.f) - x;
 }
 
 // ── drawControls ──────────────────────────────────────────────────────────────
 void drawControls(sf::RenderWindow& w, const sf::Font& font, const App& app) {
-    float y  = CTRL_Y + 4.f;
-    float ox = SIDEBAR_W + 8.f;
+    float y  = CTRL_Y;
+    float x  = CARD_X;
 
-    drawText(w, font, app.screen == Screen::EDITOR ? "[SPACE] Play" : "[SPACE] Stop",
-             ox, y, 13, INK2);
-    drawText(w, font, "BPM: " + std::to_string(app.bpm) + "  [+/-]",  ox + 150.f, y, 13, INK2);
-    drawText(w, font, "Bars: " + std::to_string(app.measures) + "  [M/N]", ox + 280.f, y, 13, INK2);
-    drawText(w, font, "[C] Clear",  ox + 400.f, y, 13, INK2);
-    drawText(w, font, "[S] Save  [L] Library  [H] Stats", ox + 490.f, y, 13, INK3);
+    hline(w, CARD_X, CARD_X + CARD_W, y - 12.f, HAIR_C);
+
+    // Transport state + groove parameters as chips
+    x += pill(w, font, x, y, app.screen == Screen::EDITOR ? "[Space] Play" : "[Space] Stop",
+              LINE_C, INK) + 8.f;
+    x += pill(w, font, x, y, "♩ " + std::to_string(app.bpm) + " BPM  [+/-]") + 8.f;
+    x += pill(w, font, x, y, "4/4") + 8.f;
+    x += pill(w, font, x, y, std::to_string(app.measures) + " bar" +
+              (app.measures > 1 ? "s" : "") + "  [M/N]") + 8.f;
+    x += pill(w, font, x, y, "Clear  [C]") + 8.f;
 
     if (app.screen == Screen::PLAY && !app.results.empty()) {
-        int ok  = 0;
-        for (auto& r : app.results) ok += r.correct;
-        int pct = 100 * ok / (int)app.results.size();
-        drawText(w, font,
-                 "Accuracy: " + std::to_string(pct) + "%  (" +
-                 std::to_string(ok) + "/" + std::to_string((int)app.results.size()) + ")",
-                 ox + 720.f, y, 13, GOOD_C);
+        // Live accuracy strip: on-time / early / late buckets.
+        int good = 0, early = 0, late = 0;
+        float sumAbs = 0.f;
+        for (auto& r : app.results) {
+            if (r.correct)            ++good;
+            else if (r.offsetMs < 0)  ++early;
+            else                      ++late;
+            sumAbs += std::abs(r.offsetMs);
+        }
+        int n  = (int)app.results.size();
+        float ax = CARD_X + 12.f;
+        float ay = y + 30.f;
+        drawText(w, font, "Live accuracy", ax, ay + 2.f, 12, INK);
+        ax += 96.f;
+        ax += accChip(w, font, ax, ay, "On time", 100 * good  / n, GOOD_C);
+        ax += accChip(w, font, ax, ay, "Early",   100 * early / n, WARN_C);
+        ax += accChip(w, font, ax, ay, "Late",    100 * late  / n, BAD_C);
+        drawText(w, font, "±" + std::to_string((int)(sumAbs / n)) + " ms avg",
+                 ax + 8.f, ay + 2.f, 12, INK3);
+    } else {
+        drawText(w, font, "[S] Save   [L] Library   [H] Stats",
+                 x + 6.f, y + 5.f, 12, INK3);
     }
+}
 
-    if (!app.currentGrooveName.empty())
-        drawText(w, font, "\"" + app.currentGrooveName + "\"",
-                 (float)WINDOW_W - 210.f, y, 13, ACCENT);
+// ── drawPracticeView ──────────────────────────────────────────────────────────
+// Composite editor/play layout: a staff card above a grid-sequencer card,
+// matching the design's split-view editor.
+void drawPracticeView(sf::RenderWindow& w, const sf::Font& font, const App& app) {
+    int total = app.totalSteps();
+
+    // Card backgrounds
+    fillRect(w, CARD_X, STAFF_CARD_Y, CARD_W, STAFF_CARD_H, BG);
+    strokeRect(w, CARD_X, STAFF_CARD_Y, CARD_W, STAFF_CARD_H, LINE_C);
+
+    float gridCardH = (GRID_TOP + NUM_VOICES * GRID_ROW_H + 18.f) - GRID_CARD_Y;
+    fillRect(w, CARD_X, GRID_CARD_Y, CARD_W, gridCardH, BG);
+    strokeRect(w, CARD_X, GRID_CARD_Y, CARD_W, gridCardH, LINE_C);
+
+    // Card labels (mono-ish, faint) — like the design's STAFF / GRID tags
+    drawText(w, font, "STAFF", CARD_X + 12.f, STAFF_CARD_Y + 8.f, 10, INK3);
+    drawText(w, font, "GRID",  CARD_X + 12.f, GRID_CARD_Y + 7.f, 10, INK3);
+
+    drawStaff(w, font, app, total);
+    drawGroove(w, app, total);
+    if (app.screen == Screen::PLAY) {
+        drawResults(w, app, total);
+        drawPlayhead(w, app);
+    }
+    drawGrid(w, font, app, total);
+    drawControls(w, font, app);
 }
 
 // ── drawTitleBar ──────────────────────────────────────────────────────────────
@@ -347,9 +429,10 @@ void drawSidebar(sf::RenderWindow& w, const sf::Font& font, const App& app) {
     sf::CircleShape dot(3.5f);
     dot.setOrigin({3.5f, 3.5f});
     dot.setPosition({px + 12.f, statusY + 17.f});
-    dot.setFillColor(GOOD_C);
+    dot.setFillColor(app.midiConnected ? GOOD_C : BAD_C);
     w.draw(dot);
-    drawText(w, font, "MIDI connected", px + 22.f, statusY + 9.f, 11, INK2);
+    drawText(w, font, app.midiConnected ? "MIDI connected" : "No MIDI device",
+             px + 22.f, statusY + 9.f, 11, INK2);
 }
 
 // ── drawContentHeader ─────────────────────────────────────────────────────────
@@ -391,7 +474,10 @@ void drawHomeScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) {
     float cw = (float)WINDOW_W - SIDEBAR_W - 52.f;
 
     drawText(w, font, "Good evening.", cx, cy, 26, INK);
-    drawText(w, font, "Ready for a session? Your kit is connected.", cx, cy + 36.f, 13, INK2);
+    drawText(w, font,
+             app.midiConnected ? "Ready for a session? Your kit is connected."
+                               : "Connect a MIDI kit to start a session.",
+             cx, cy + 36.f, 13, INK2);
 
     // 3 section cards
     float cardY = cy + 78.f;
@@ -555,11 +641,18 @@ void drawStatsScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) 
     strokeRect(w, cx, tableY, cw, 28.f, LINE_C);
     drawText(w, font, "Recent sessions", cx + 14.f, tableY + 7.f, 13, INK);
 
+    // Column anchors (x offsets from cx). Values sit a few px right of headers.
+    float colBpm  = cw - 360.f;
+    float colDate = cw - 290.f;
+    float colDur  = cw - 180.f;
+    float colAcc  = cw - 80.f;
+
     float hdrY = tableY + 36.f;
-    drawText(w, font, "Groove",    cx + 14.f,        hdrY, 11, INK3);
-    drawText(w, font, "BPM",       cx + cw - 260.f,  hdrY, 11, INK3);
-    drawText(w, font, "Date",      cx + cw - 190.f,  hdrY, 11, INK3);
-    drawText(w, font, "Accuracy",  cx + cw - 90.f,   hdrY, 11, INK3);
+    drawText(w, font, "Groove",    cx + 14.f,         hdrY, 11, INK3);
+    drawText(w, font, "BPM",       cx + colBpm,       hdrY, 11, INK3);
+    drawText(w, font, "Date",      cx + colDate,      hdrY, 11, INK3);
+    drawText(w, font, "Duration",  cx + colDur,       hdrY, 11, INK3);
+    drawText(w, font, "Accuracy",  cx + colAcc,       hdrY, 11, INK3);
     hline(w, cx, cx + cw, hdrY + 16.f, LINE_C);
 
     float rowY = hdrY + 24.f;
@@ -571,14 +664,19 @@ void drawStatsScreen(sf::RenderWindow& w, const sf::Font& font, const App& app) 
     for (int i = (int)app.history.size() - 1; i >= 0 && shown < 7; --i, ++shown) {
         const auto& s = app.history[i];
         if (shown > 0) hline(w, cx, cx + cw, rowY, HAIR_C);
-        drawText(w, font, s.grooveName,          cx + 14.f,       rowY + 10.f, 13, INK);
-        drawText(w, font, std::to_string(s.bpm), cx + cw - 255.f, rowY + 10.f, 12, INK2);
+        drawText(w, font, s.grooveName,          cx + 14.f,        rowY + 10.f, 13, INK);
+        drawText(w, font, std::to_string(s.bpm), cx + colBpm + 5.f, rowY + 10.f, 12, INK2);
 
         char buf[32] = {};
         time_t ts = (time_t)s.timestampEpoch;
         strftime(buf, sizeof(buf), "%b %d", localtime(&ts));
-        drawText(w, font, buf, cx + cw - 185.f, rowY + 10.f, 12, INK2);
-        drawText(w, font, std::to_string((int)s.accuracyPct) + "%", cx + cw - 86.f, rowY + 10.f, 13, INK);
+        drawText(w, font, buf, cx + colDate + 5.f, rowY + 10.f, 12, INK2);
+
+        char durBuf[16] = {};
+        snprintf(durBuf, sizeof(durBuf), "%d:%02d", s.durationSecs / 60, s.durationSecs % 60);
+        drawText(w, font, durBuf, cx + colDur + 5.f, rowY + 10.f, 12, INK2);
+
+        drawText(w, font, std::to_string((int)s.accuracyPct) + "%", cx + colAcc + 5.f, rowY + 10.f, 13, INK);
         rowY += rowH;
     }
 

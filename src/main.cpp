@@ -12,6 +12,7 @@
 #include <cmath>
 #include <ctime>
 #include <iostream>
+#include <tuple>
 
 using Clock = std::chrono::steady_clock;
 
@@ -54,7 +55,8 @@ static drumming::Screen sidebarNavHit(float mx, float my) {
 int main() {
     // MIDI — optional; app still works without a kit
     RtMidiIn midiin;
-    if (midiin.getPortCount() > 0) {
+    bool midiConnected = midiin.getPortCount() > 0;
+    if (midiConnected) {
         midiin.openPort(0);
         midiin.setCallback(&drumming::midiCallback);
         midiin.ignoreTypes(false, false, false);
@@ -78,8 +80,16 @@ int main() {
     sf::Sound hiClick(hiClickBuf), loClick(loClickBuf);
 
     drumming::App g;
+    g.midiConnected = midiConnected;
+    auto lastMidiScan = Clock::now();
     drumming::loadGrooves(g);
     drumming::loadHistory(g);
+    // TEMP-VERIFY
+    g.screen = drumming::Screen::EDITOR;
+    g.currentGrooveName = "Basic Rock Beat";
+    for (int s : {0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30}) g.groove.insert({s,2});
+    for (int s : {4,12,20,28}) g.groove.insert({s,5});
+    for (int s : {0,8,16,22,24}) g.groove.insert({s,7});
 
     while (window.isOpen()) {
         // ── Events ──────────────────────────────────────────────────────────
@@ -284,11 +294,13 @@ int main() {
                     }
                 }
 
-                // Editor: place/remove notes
+                // Editor: place/remove notes — via the grid sequencer or the staff
                 if (g.screen == drumming::Screen::EDITOR &&
                     mb->button == sf::Mouse::Button::Left &&
                     my >= drumming::TITLEBAR_H + drumming::CONTENT_HEAD_H) {
-                    auto [step, vi] = drumming::pickCell({mx, my}, g.totalSteps());
+                    auto [step, vi] = drumming::pickGridCell({mx, my}, g.totalSteps());
+                    if (step < 0 || vi < 0)
+                        std::tie(step, vi) = drumming::pickCell({mx, my}, g.totalSteps());
                     if (step >= 0 && vi >= 0) {
                         auto key = std::make_pair(step, vi);
                         if (g.groove.count(key)) g.groove.erase(key);
@@ -304,11 +316,30 @@ int main() {
             }
         }
 
+        // ── MIDI hot-plug ─────────────────────────────────────────────────────
+        // Poll port availability ~1×/sec so plugging/unplugging a kit updates
+        // the connection state without a restart.
+        if (Clock::now() - lastMidiScan > std::chrono::seconds(1)) {
+            lastMidiScan = Clock::now();
+            switch (drumming::decideMidiAction(g.midiConnected, midiin.getPortCount())) {
+            case drumming::MidiPortAction::Open:
+                midiin.openPort(0);
+                midiin.setCallback(&drumming::midiCallback);
+                midiin.ignoreTypes(false, false, false);
+                g.midiConnected = true;
+                break;
+            case drumming::MidiPortAction::Close:
+                midiin.cancelCallback();
+                midiin.closePort();
+                g.midiConnected = false;
+                break;
+            case drumming::MidiPortAction::None:
+                break;
+            }
+        }
+
         // ── MIDI ────────────────────────────────────────────────────────────
         for (auto& ev : drumming::pollMidi()) {
-            g.lastHit[ev.note] = ev.time;
-            g.lastVel[ev.note] = ev.vel;
-
             if (g.screen == drumming::Screen::PLAY && g.currentStep >= 0) {
                 int vi = drumming::voiceIndex(ev.note);
                 if (vi >= 0) {
@@ -366,14 +397,7 @@ int main() {
             break;
         case drumming::Screen::EDITOR:
         case drumming::Screen::PLAY:
-            drumming::drawStaff(window, font, g, g.totalSteps());
-            drumming::drawGroove(window, g, g.totalSteps());
-            if (g.screen == drumming::Screen::PLAY) {
-                drumming::drawResults(window, g, g.totalSteps());
-                drumming::drawPlayhead(window, g);
-            }
-            drumming::drawKit(window, font, g);
-            drumming::drawControls(window, font, g);
+            drumming::drawPracticeView(window, font, g);
             break;
         }
 
