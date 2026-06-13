@@ -49,12 +49,15 @@ add_library(drumming_core STATIC
     src/midi.cpp
     src/types.cpp
     src/geometry.cpp
+    src/scoring.cpp
+    src/persistence.cpp
 )
 target_include_directories(drumming_core PUBLIC include)
 target_link_libraries(drumming_core PUBLIC
     rtmidi
     SFML::Graphics
     SFML::System
+    SQLite::SQLite3
 )
 
 # ── drum_viz ─────────────────────────────────────────────────────────────────
@@ -62,7 +65,6 @@ add_executable(drum_viz
     src/main.cpp
     src/audio.cpp
     src/draw.cpp
-    src/persistence.cpp
 )
 target_include_directories(drum_viz PRIVATE include)
 target_link_libraries(drum_viz PRIVATE
@@ -71,7 +73,6 @@ target_link_libraries(drum_viz PRIVATE
     SFML::Window
     SFML::Audio
     SFML::System
-    SQLite::SQLite3
 )
 
 # ── drums_in (MIDI debug tool) ────────────────────────────────────────────────
@@ -79,7 +80,13 @@ add_executable(drums_in tools/drums_in.cpp)
 target_link_libraries(drums_in PRIVATE rtmidi)
 
 # ── tests ─────────────────────────────────────────────────────────────────────
-add_executable(drumming_tests tests/test_midi.cpp tests/test_geometry.cpp)
+add_executable(drumming_tests
+    tests/test_midi.cpp
+    tests/test_geometry.cpp
+    tests/test_scoring.cpp
+    tests/test_types.cpp
+    tests/test_persistence.cpp
+)
 target_link_libraries(drumming_tests PRIVATE drumming_core Catch2::Catch2WithMain)
 
 include(Catch)

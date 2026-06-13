@@ -135,3 +135,87 @@ TEST_CASE("pickCell - total=8 and total=32 both resolve correctly", "[geometry]"
         }
     }
 }
+
+// ── pickGridCell ────────────────────────────────────────────────────────────
+//
+// The grid sequencer lays out one fixed-height row per voice starting at
+// GRID_TOP, with steps spread across the staff width. Unlike pickCell it uses
+// row banding (not nearest-notehead) for the voice axis.
+
+// Center of a given grid cell, for round-tripping.
+static sf::Vector2f gridCenter(int step, int vi, int total) {
+    float cw = (STAFF_RIGHT - STAFF_LEFT) / total;
+    float x  = STAFF_LEFT + (step + 0.5f) * cw;
+    float y  = GRID_TOP + (vi + 0.5f) * GRID_ROW_H;
+    return {x, y};
+}
+
+TEST_CASE("pickGridCell - y above the grid returns {-1,-1}", "[geometry][grid]") {
+    CHECK(pickGridCell(pt(STAFF_LEFT + 10.f, GRID_TOP - 1.f), 16) == std::make_pair(-1, -1));
+}
+
+TEST_CASE("pickGridCell - y below the last row returns {-1,-1}", "[geometry][grid]") {
+    float yBelow = GRID_TOP + NUM_VOICES * GRID_ROW_H + 1.f;
+    CHECK(pickGridCell(pt(STAFF_LEFT + 10.f, yBelow), 16) == std::make_pair(-1, -1));
+}
+
+TEST_CASE("pickGridCell - x left of staff returns {-1,-1}", "[geometry][grid]") {
+    float y = GRID_TOP + GRID_ROW_H / 2.f;
+    CHECK(pickGridCell(pt(STAFF_LEFT - 1.f, y), 16) == std::make_pair(-1, -1));
+}
+
+TEST_CASE("pickGridCell - x right of staff returns {-1,-1}", "[geometry][grid]") {
+    float y = GRID_TOP + GRID_ROW_H / 2.f;
+    CHECK(pickGridCell(pt(STAFF_RIGHT + 1.f, y), 16) == std::make_pair(-1, -1));
+    // Right edge is exclusive.
+    CHECK(pickGridCell(pt(STAFF_RIGHT, y), 16) == std::make_pair(-1, -1));
+}
+
+TEST_CASE("pickGridCell - first row maps to voice 0", "[geometry][grid]") {
+    auto [step, vi] = pickGridCell(gridCenter(0, 0, 16), 16);
+    CHECK(step == 0);
+    CHECK(vi   == 0);
+}
+
+TEST_CASE("pickGridCell - last row maps to the last voice", "[geometry][grid]") {
+    auto [step, vi] = pickGridCell(gridCenter(3, NUM_VOICES - 1, 16), 16);
+    CHECK(step == 3);
+    CHECK(vi   == NUM_VOICES - 1);
+}
+
+TEST_CASE("pickGridCell - every cell center round-trips", "[geometry][grid]") {
+    const int total = 16;
+    for (int vi = 0; vi < NUM_VOICES; ++vi) {
+        for (int s = 0; s < total; ++s) {
+            auto [step, voice] = pickGridCell(gridCenter(s, vi, total), total);
+            INFO("vi=" << vi << " step=" << s);
+            CHECK(step  == s);
+            CHECK(voice == vi);
+        }
+    }
+}
+
+TEST_CASE("pickGridCell - rows are stacked top to bottom", "[geometry][grid]") {
+    // A point in row k must resolve to voice k for every voice.
+    for (int vi = 0; vi < NUM_VOICES; ++vi) {
+        float y = GRID_TOP + (vi + 0.5f) * GRID_ROW_H;
+        auto [step, voice] = pickGridCell(pt(STAFF_LEFT + 5.f, y), 16);
+        INFO("row " << vi);
+        CHECK(voice == vi);
+    }
+}
+
+TEST_CASE("pickGridCell - top edge of the grid is inclusive", "[geometry][grid]") {
+    auto [step, vi] = pickGridCell(pt(STAFF_LEFT + 5.f, GRID_TOP), 16);
+    CHECK(vi == 0);
+}
+
+TEST_CASE("pickGridCell - total=8 and total=32 round-trip", "[geometry][grid]") {
+    for (int total : {8, 32}) {
+        for (int s = 0; s < total; ++s) {
+            auto [step, voice] = pickGridCell(gridCenter(s, 5, total), total);
+            INFO("total=" << total << " step=" << s);
+            CHECK(step == s);
+        }
+    }
+}

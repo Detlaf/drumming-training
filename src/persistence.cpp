@@ -17,7 +17,8 @@ namespace drumming {
 //
 //   sessions  one row per practiced session.
 
-static const char* kDbPath = "drumming.db";
+static std::string gDbPath = "drumming.db";
+static sqlite3*    gHandle  = nullptr;
 
 static const char* kSchema =
     "CREATE TABLE IF NOT EXISTS grooves ("
@@ -43,24 +44,34 @@ static const char* kSchema =
     "CREATE INDEX IF NOT EXISTS idx_sessions_playedat ON sessions(played_at);";
 
 static sqlite3* db() {
-    static sqlite3* handle = nullptr;
-    if (handle) return handle;
+    if (gHandle) return gHandle;
 
-    if (sqlite3_open(kDbPath, &handle) != SQLITE_OK) {
+    if (sqlite3_open(gDbPath.c_str(), &gHandle) != SQLITE_OK) {
         std::fprintf(stderr, "sqlite: cannot open %s: %s\n",
-                     kDbPath, sqlite3_errmsg(handle));
-        sqlite3_close(handle);
-        handle = nullptr;
+                     gDbPath.c_str(), sqlite3_errmsg(gHandle));
+        sqlite3_close(gHandle);
+        gHandle = nullptr;
         return nullptr;
     }
 
     char* err = nullptr;
-    if (sqlite3_exec(handle, kSchema, nullptr, nullptr, &err) != SQLITE_OK) {
+    if (sqlite3_exec(gHandle, kSchema, nullptr, nullptr, &err) != SQLITE_OK) {
         std::fprintf(stderr, "sqlite: schema error: %s\n", err ? err : "?");
         sqlite3_free(err);
     }
 
-    return handle;
+    return gHandle;
+}
+
+// Point persistence at a different database file, closing any open connection
+// so the next call reopens against the new path. Used by tests to isolate state
+// in a temporary database; in normal use the default "drumming.db" is kept.
+void setDatabasePath(const std::string& path) {
+    if (gHandle) {
+        sqlite3_close(gHandle);
+        gHandle = nullptr;
+    }
+    gDbPath = path;
 }
 
 // ── Notes (de)serialisation ──────────────────────────────────────────────────

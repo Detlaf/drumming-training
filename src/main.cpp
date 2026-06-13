@@ -3,6 +3,7 @@
 #include "drumming/geometry.h"
 #include "drumming/midi.h"
 #include "drumming/persistence.h"
+#include "drumming/scoring.h"
 #include "drumming/types.h"
 #include <SFML/Audio.hpp>
 #include <SFML/Graphics.hpp>
@@ -29,7 +30,7 @@ static void endSession(drumming::App& g) {
     rec.measures       = g.measures;
     rec.correctHits    = ok;
     rec.totalNotes     = total;
-    rec.accuracyPct    = total > 0 ? 100.f * ok / total : 0.f;
+    rec.accuracyPct    = drumming::accuracyPct(ok, total);
     rec.timestampEpoch = (long long)std::time(nullptr);
     rec.durationSecs   = dur;
 
@@ -364,14 +365,10 @@ int main() {
             if (g.screen == drumming::Screen::PLAY && g.currentStep >= 0) {
                 int vi = drumming::voiceIndex(ev.note);
                 if (vi >= 0) {
-                    float ms      = std::chrono::duration<float, std::milli>(
-                                        ev.time - g.playStart).count();
-                    float stepF   = ms / g.stepDurMs();
-                    int   nearest = (int)std::round(stepF) % g.totalSteps();
-                    float offsetMs = (stepF - std::round(stepF)) * g.stepDurMs();
-                    bool  correct  = g.groove.count({nearest, vi}) &&
-                                     std::abs(offsetMs) < drumming::HIT_WINDOW_MS;
-                    g.results.push_back({nearest, vi, offsetMs, correct});
+                    float ms = std::chrono::duration<float, std::milli>(
+                                   ev.time - g.playStart).count();
+                    g.results.push_back(drumming::scoreHit(
+                        ms, g.groove, vi, g.totalSteps(), g.stepDurMs()));
                 }
             }
         }
