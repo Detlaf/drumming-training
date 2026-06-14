@@ -15,7 +15,9 @@ Checks: >
   -readability-identifier-length,
   -readability-braces-around-statements,
   -readability-function-cognitive-complexity,
-  -bugprone-easily-swappable-parameters
+  -bugprone-easily-swappable-parameters,
+  -readability-uppercase-literal-suffix,
+  -readability-isolate-declaration
 
 WarningsAsErrors: ''
 
