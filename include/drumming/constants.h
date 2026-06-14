@@ -32,6 +32,17 @@ inline constexpr float GRID_TOP     = GRID_CARD_Y + 26.f;       // first cell ro
 inline constexpr float GRID_ROW_H   = 28.f;
 inline constexpr float CTRL_Y       = 632.f;
 
+// Sidebar nav items (Play/Library/Stats). The first item's top matches the
+// drawSidebar layout: brand block (14 + 50) then the "PRACTICE" label (22).
+inline constexpr float SIDEBAR_PAD          = 12.f;
+inline constexpr float SIDEBAR_NAV_TOP      = TITLEBAR_H + 14.f + 50.f + 22.f;
+inline constexpr float SIDEBAR_NAV_ITEM_H   = 34.f;
+inline constexpr float SIDEBAR_NAV_ITEM_GAP = 4.f;
+
+// Library list rows
+inline constexpr float LIBRARY_ROW_H     = 44.f;
+inline constexpr float LIBRARY_DEL_BTN_W = 26.f;
+
 // Timing
 inline constexpr int   STEPS_PER_BEAT    = 4;
 inline constexpr int   BEATS_PER_MEASURE = 4;

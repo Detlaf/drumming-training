@@ -95,6 +95,26 @@ TEST_CASE("scoreHit - hit on the final step of a loop does not wrap", "[scoring]
     CHECK(r.correct);
 }
 
+TEST_CASE("scoreHit - hit just past the last step rounds up and wraps to step 0", "[scoring]") {
+    const float dur = 125.f;
+    // 15.6 steps into a 16-step loop rounds up to 16, which wraps to step 0.
+    // The offset is measured against step 16, so it stays negative (early of 16).
+    HitResult r = scoreHit(15.6f * dur, grooveAt(0, 5), 5, 16, dur);
+    CHECK(r.step == 0);
+    CHECK_THAT(r.offsetMs, WithinAbs(-0.4f * dur, 1e-2f));
+    CHECK(r.correct); // |offset| = 50ms < HIT_WINDOW_MS
+}
+
+TEST_CASE("scoreHit - unrecognized pad (voice -1) is always incorrect", "[scoring]") {
+    const float dur = 125.f;
+    // An unknown pad maps to voice -1; no groove cell can match, so the hit is
+    // snapped for display but counted as a miss.
+    HitResult r = scoreHit(4 * dur, grooveAt(4, 5), -1, 16, dur);
+    CHECK(r.step  == 4);
+    CHECK(r.voice == -1);
+    CHECK_FALSE(r.correct);
+}
+
 // ── accuracyPct ─────────────────────────────────────────────────────────────
 
 TEST_CASE("accuracyPct - zero notes yields 0", "[scoring]") {

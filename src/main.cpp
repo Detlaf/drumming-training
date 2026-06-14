@@ -38,21 +38,6 @@ static void endSession(drumming::App& g) {
     g.sessionActive = false;
 }
 
-// Hit-test sidebar nav items; returns target Screen or current screen if no hit.
-static drumming::Screen sidebarNavHit(float mx, float my) {
-    using namespace drumming;
-    if (mx >= SIDEBAR_W || my < TITLEBAR_H) return Screen::HOME; // sentinel for "no match"
-
-    float y      = TITLEBAR_H + 14.f + 50.f + 22.f; // matches drawSidebar layout
-    float itemH  = 34.f, itemGap = 4.f;
-    Screen navSc[] = {Screen::EDITOR, Screen::LIBRARY, Screen::STATS};
-    for (auto sc : navSc) {
-        if (my >= y && my < y + itemH) return sc;
-        y += itemH + itemGap;
-    }
-    return Screen::HOME; // no match
-}
-
 int main() {
     // MIDI — optional; app still works without a kit
     RtMidiIn midiin;
@@ -106,12 +91,6 @@ int main() {
     auto lastMidiScan = Clock::now();
     drumming::loadGrooves(g);
     drumming::loadHistory(g);
-    // TEMP-VERIFY
-    g.screen = drumming::Screen::EDITOR;
-    g.currentGrooveName = "Basic Rock Beat";
-    for (int s : {0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30}) g.groove.insert({s,2});
-    for (int s : {4,12,20,28}) g.groove.insert({s,5});
-    for (int s : {0,8,16,22,24}) g.groove.insert({s,7});
 
     while (window.isOpen()) {
         // ── Events ──────────────────────────────────────────────────────────
@@ -233,80 +212,58 @@ int main() {
                 float my = (float)mb->position.y;
 
                 // Sidebar nav
-                if (mx < drumming::SIDEBAR_W && my > drumming::TITLEBAR_H &&
-                    g.screen != drumming::Screen::PLAY) {
-                    drumming::Screen hit = sidebarNavHit(mx, my);
-                    if (hit != drumming::Screen::HOME) // HOME = sentinel for "no match"
-                        g.screen = hit;
+                if (g.screen != drumming::Screen::PLAY) {
+                    if (auto hit = drumming::sidebarNavHit({mx, my}))
+                        g.screen = *hit;
                 }
 
                 // Library row actions (load or delete)
                 if (g.screen == drumming::Screen::LIBRARY && mx >= drumming::SIDEBAR_W) {
-                    float col1    = drumming::SIDEBAR_W + 26.f;
-                    float searchY = drumming::TITLEBAR_H + drumming::CONTENT_HEAD_H + 14.f;
-                    float colY    = searchY + 50.f;
-                    float listTop = colY + 24.f;
-                    float rowH    = 44.f;
-                    float delX    = (float)drumming::WINDOW_W - 60.f;
-
                     // "New groove" button
-                    float btnX = (float)drumming::WINDOW_W - 150.f;
-                    if (mx >= btnX && mx < btnX + 120.f &&
-                        my >= searchY && my < searchY + 34.f) {
+                    if (drumming::libraryNewGrooveRect().contains({mx, my})) {
                         g.groove.clear();
                         g.currentGrooveName.clear();
                         g.screen = drumming::Screen::EDITOR;
                     }
 
                     // Groove row
-                    if (my >= listTop && mx >= col1) {
-                        int idx = (int)((my - listTop) / rowH) + g.libraryScroll;
-                        if (idx >= 0 && idx < (int)g.library.size()) {
-                            if (mx >= delX && mx < delX + 26.f) {
-                                // Delete
-                                if (g.currentGrooveName == g.library[idx].name)
-                                    g.currentGrooveName.clear();
-                                g.library.erase(g.library.begin() + idx);
-                                drumming::saveGrooves(g);
-                            } else {
-                                // Load
-                                const auto& sg = g.library[idx];
-                                g.groove  = sg.groove;
-                                g.bpm     = sg.bpm;
-                                g.measures = sg.measures;
-                                g.currentGrooveName = sg.name;
-                                g.screen  = drumming::Screen::EDITOR;
-                            }
+                    int count = (int)g.library.size();
+                    int idx   = drumming::libraryRowAt(my, g.libraryScroll, count);
+                    if (idx >= 0 && mx >= drumming::SIDEBAR_W + 26.f) {
+                        int rowFromTop =
+                            idx - drumming::libraryListStart(g.libraryScroll, count);
+                        if (drumming::libraryDeleteRect(rowFromTop).contains({mx, my})) {
+                            // Delete
+                            if (g.currentGrooveName == g.library[idx].name)
+                                g.currentGrooveName.clear();
+                            g.library.erase(g.library.begin() + idx);
+                            drumming::saveGrooves(g);
+                        } else {
+                            // Load
+                            const auto& sg = g.library[idx];
+                            g.groove  = sg.groove;
+                            g.bpm     = sg.bpm;
+                            g.measures = sg.measures;
+                            g.currentGrooveName = sg.name;
+                            g.screen  = drumming::Screen::EDITOR;
                         }
                     }
                 }
 
                 // Home screen card clicks + Resume button
                 if (g.screen == drumming::Screen::HOME && mx >= drumming::SIDEBAR_W) {
-                    float cx    = drumming::SIDEBAR_W + 26.f;
-                    float cy2   = drumming::TITLEBAR_H + drumming::CONTENT_HEAD_H + 22.f;
-                    float cw    = (float)drumming::WINDOW_W - drumming::SIDEBAR_W - 52.f;
-                    float cardY = cy2 + 78.f;
-                    float cardW = (cw - 28.f) / 3.f;
-                    float cardH = 112.f;
-
                     drumming::Screen cardSc[] = {
                         drumming::Screen::EDITOR,
                         drumming::Screen::LIBRARY,
                         drumming::Screen::STATS
                     };
-                    for (int i = 0; i < 3; ++i) {
-                        float bx = cx + i * (cardW + 14.f);
-                        if (mx >= bx && mx < bx + cardW && my >= cardY && my < cardY + cardH)
+                    for (int i = 0; i < 3; ++i)
+                        if (drumming::homeCardRect(i).contains({mx, my}))
                             g.screen = cardSc[i];
-                    }
 
                     // Resume button
-                    float cwY  = cardY + cardH + 20.f;
-                    float btnX = cx + cw - 114.f;
                     if (!g.library.empty() &&
-                        mx >= btnX && mx < btnX + 100.f &&
-                        my >= cwY + 24.f && my < cwY + 56.f) {
+                        drumming::homeResumeRect().contains({mx, my})) {
                         const auto& sg = g.library.back();
                         g.groove  = sg.groove;
                         g.bpm     = sg.bpm;
@@ -363,13 +320,14 @@ int main() {
         // ── MIDI ────────────────────────────────────────────────────────────
         for (auto& ev : drumming::pollMidi()) {
             if (g.screen == drumming::Screen::PLAY && g.currentStep >= 0) {
-                int vi = drumming::voiceIndex(ev.note);
-                if (vi >= 0) {
-                    float ms = std::chrono::duration<float, std::milli>(
-                                   ev.time - g.playStart).count();
-                    g.results.push_back(drumming::scoreHit(
-                        ms, g.groove, vi, g.totalSteps(), g.stepDurMs()));
-                }
+                // An unrecognized pad maps to voice -1; it can never match a
+                // groove cell, so scoreHit marks it incorrect and it counts as a
+                // miss against accuracy rather than being silently dropped.
+                int   vi = drumming::voiceIndex(ev.note);
+                float ms = std::chrono::duration<float, std::milli>(
+                               ev.time - g.playStart).count();
+                g.results.push_back(drumming::scoreHit(
+                    ms, g.groove, vi, g.totalSteps(), g.stepDurMs()));
             }
         }
 
