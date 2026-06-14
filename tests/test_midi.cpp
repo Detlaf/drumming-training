@@ -33,6 +33,23 @@ TEST_CASE("midiCallback - note-on with vel=0 is ignored (note-off convention)", 
     CHECK(pollMidi().empty());
 }
 
+TEST_CASE("midiCallback - low-velocity note-on is dropped as cross-talk", "[midi]") {
+    drain();
+
+    // A faint ghost trigger below MIN_HIT_VELOCITY (e.g. the hi-hat sensor
+    // picking up a tom strike) must not be queued as a real hit.
+    std::vector<unsigned char> ghost = makeMsg(0x90, 42, MIN_HIT_VELOCITY - 1);
+    midiCallback(0.0, &ghost, nullptr);
+    CHECK(pollMidi().empty());
+
+    // A strike exactly at the threshold counts.
+    std::vector<unsigned char> real = makeMsg(0x90, 42, MIN_HIT_VELOCITY);
+    midiCallback(0.0, &real, nullptr);
+    auto evs = pollMidi();
+    REQUIRE(evs.size() == 1);
+    CHECK(evs[0].note == 42);
+}
+
 TEST_CASE("midiCallback - non-note-on status byte is ignored", "[midi]") {
     drain();
 
