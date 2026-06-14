@@ -75,3 +75,5 @@ Testing/
 *.db-journal
 *.db-wal
 *.db-shm
+# icon build intermediates
+resources/AppIcon.iconset/

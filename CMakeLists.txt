@@ -66,11 +66,16 @@ target_link_libraries(drumming_core PUBLIC
 # ── drum_viz ─────────────────────────────────────────────────────────────────
 # On macOS this produces a double-clickable Drumming.app bundle; elsewhere a
 # plain executable.
-add_executable(drum_viz MACOSX_BUNDLE
+set(DRUM_VIZ_SOURCES
     src/main.cpp
     src/audio.cpp
     src/draw.cpp
 )
+if(APPLE)
+    set(DRUM_VIZ_ICON "${CMAKE_SOURCE_DIR}/resources/AppIcon.icns")
+    list(APPEND DRUM_VIZ_SOURCES "${DRUM_VIZ_ICON}")
+endif()
+add_executable(drum_viz MACOSX_BUNDLE ${DRUM_VIZ_SOURCES})
 target_include_directories(drum_viz PRIVATE include)
 target_link_libraries(drum_viz PRIVATE
     drumming_core
@@ -87,6 +92,10 @@ if(APPLE)
         MACOSX_BUNDLE_GUI_IDENTIFIER     "com.drumming.training"
         MACOSX_BUNDLE_BUNDLE_VERSION     "1.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        MACOSX_BUNDLE_ICON_FILE          "AppIcon"
+    )
+    set_source_files_properties("${DRUM_VIZ_ICON}" PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
     )
 endif()
 
