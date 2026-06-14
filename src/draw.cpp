@@ -204,6 +204,7 @@ void drawPlayhead(sf::RenderTarget& w, const App& app) {
 void drawResults(sf::RenderTarget& w, const App& app, int total) {
     float cellW = (STAFF_RIGHT - STAFF_LEFT) / total;
     for (auto& r : app.results) {
+        if (r.voice < 0) continue; // unrecognized pad: counts as a miss, no ring
         float     x = STAFF_LEFT + (r.step + 0.5f) * cellW;
         float     y = voiceY(r.voice);
         sf::Color c = r.correct ? GOOD_C : BAD_C;
@@ -417,16 +418,17 @@ void drawSidebar(sf::RenderTarget& w, const sf::Font& font, const App& app) {
         {Screen::LIBRARY, "Library"},
         {Screen::STATS,   "Stats"},
     };
-    float itemH = 34.f, itemGap = 4.f;
-    for (auto& item : items) {
+    for (int i = 0; i < 3; ++i) {
+        const auto& item = items[i];
+        sf::FloatRect r  = sidebarNavItemRect(i);
         bool active = (app.screen == item.sc) ||
                       (app.screen == Screen::PLAY && item.sc == Screen::EDITOR);
         if (active) {
-            fillRect(w, px, y, SIDEBAR_W - px * 2.f, itemH, BG);
-            strokeRect(w, px, y, SIDEBAR_W - px * 2.f, itemH, LINE_C);
+            fillRect(w, r.position.x, r.position.y, r.size.x, r.size.y, BG);
+            strokeRect(w, r.position.x, r.position.y, r.size.x, r.size.y, LINE_C);
         }
-        drawText(w, font, item.label, px + 14.f, y + 9.f, 13, active ? INK : INK2);
-        y += itemH + itemGap;
+        drawText(w, font, item.label, r.position.x + 14.f, r.position.y + 9.f, 13,
+                 active ? INK : INK2);
     }
 
     // MIDI status chip at bottom
@@ -487,27 +489,25 @@ void drawHomeScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) {
              cx, cy + 36.f, 13, INK2);
 
     // 3 section cards
-    float cardY = cy + 78.f;
-    float cardW = (cw - 28.f) / 3.f;
-    float cardH = 112.f;
-
     struct Card { Screen sc; const char* title; const char* desc; };
     Card cards[] = {
         {Screen::EDITOR,  "Play",    "Pick a groove and play along."},
         {Screen::LIBRARY, "Library", "Browse, edit & save grooves."},
         {Screen::STATS,   "Stats",   "See your practice reports."},
     };
+    sf::FloatRect card0 = homeCardRect(0);
     for (int i = 0; i < 3; ++i) {
-        float bx = cx + i * (cardW + 14.f);
-        fillRect(w, bx, cardY, cardW, cardH, BG);
-        strokeRect(w, bx, cardY, cardW, cardH, LINE_C);
+        sf::FloatRect r = homeCardRect(i);
+        float bx = r.position.x, cardY = r.position.y;
+        fillRect(w, bx, cardY, r.size.x, r.size.y, BG);
+        strokeRect(w, bx, cardY, r.size.x, r.size.y, LINE_C);
         fillRect(w, bx + 14.f, cardY + 14.f, 32.f, 32.f, BG3);
         drawText(w, font, cards[i].title, bx + 14.f, cardY + 58.f, 14, INK);
         drawText(w, font, cards[i].desc,  bx + 14.f, cardY + 78.f, 11, INK3);
     }
 
     // "Continue" card
-    float cwY = cardY + cardH + 20.f;
+    float cwY = card0.position.y + card0.size.y + 20.f;
     fillRect(w, cx, cwY, cw, 82.f, BG);
     strokeRect(w, cx, cwY, cw, 82.f, LINE_C);
     drawText(w, font, "CONTINUE WHERE YOU LEFT OFF", cx + 14.f, cwY + 10.f, 10, INK3);
@@ -522,9 +522,9 @@ void drawHomeScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     }
 
     // Resume button
-    float btnX = cx + cw - 114.f;
-    fillRect(w, btnX, cwY + 24.f, 100.f, 32.f, INK);
-    drawText(w, font, "Resume", btnX + 26.f, cwY + 31.f, 13, BG);
+    sf::FloatRect resume = homeResumeRect();
+    fillRect(w, resume.position.x, resume.position.y, resume.size.x, resume.size.y, INK);
+    drawText(w, font, "Resume", resume.position.x + 26.f, resume.position.y + 7.f, 13, BG);
 }
 
 // ── drawLibraryScreen ─────────────────────────────────────────────────────────
@@ -540,9 +540,10 @@ void drawLibraryScreen(sf::RenderTarget& w, const sf::Font& font, const App& app
     drawText(w, font, "Search by name...", cx + 40.f, searchY + 9.f, 13, INK3);
 
     // New groove button
-    float btnX = (float)WINDOW_W - 150.f;
-    fillRect(w, btnX, searchY, 120.f, 34.f, INK);
-    drawText(w, font, "+ New groove", btnX + 14.f, searchY + 9.f, 13, BG);
+    sf::FloatRect newBtn = libraryNewGrooveRect();
+    fillRect(w, newBtn.position.x, newBtn.position.y, newBtn.size.x, newBtn.size.y, INK);
+    drawText(w, font, "+ New groove", newBtn.position.x + 14.f, newBtn.position.y + 9.f,
+             13, BG);
 
     // Column headers
     float colY   = searchY + 50.f;
@@ -553,9 +554,9 @@ void drawLibraryScreen(sf::RenderTarget& w, const sf::Font& font, const App& app
     hline(w, col1, (float)WINDOW_W - 26.f, colY + 18.f, LINE_C);
 
     // Groove list
-    float listTop = colY + 24.f;
-    float rowH    = 44.f;
-    int   maxVis  = std::max(1, (int)(((float)WINDOW_H - listTop - 20.f) / rowH));
+    float listTop = libraryListTop();
+    float rowH    = LIBRARY_ROW_H;
+    int   maxVis  = libraryMaxVisibleRows();
 
     if (app.library.empty()) {
         fillRect(w, col1, listTop, cw - 52.f, rowH * 2.f, BG);
@@ -565,8 +566,7 @@ void drawLibraryScreen(sf::RenderTarget& w, const sf::Font& font, const App& app
         return;
     }
 
-    int start = std::max(0, std::min(app.libraryScroll,
-                         (int)app.library.size() - maxVis));
+    int start = libraryListStart(app.libraryScroll, (int)app.library.size());
     int end   = std::min((int)app.library.size(), start + maxVis);
     float listH = (end - start) * rowH;
 
@@ -587,9 +587,9 @@ void drawLibraryScreen(sf::RenderTarget& w, const sf::Font& font, const App& app
                  col1 + 440.f, ry + 14.f, 12, INK2);
 
         // Delete button
-        float delX = (float)WINDOW_W - 60.f;
-        strokeRect(w, delX, ry + 9.f, 26.f, 26.f, LINE_C);
-        drawText(w, font, "X", delX + 8.f, ry + 13.f, 11, INK3);
+        sf::FloatRect del = libraryDeleteRect(i - start);
+        strokeRect(w, del.position.x, del.position.y, del.size.x, del.size.y, LINE_C);
+        drawText(w, font, "X", del.position.x + 8.f, del.position.y + 4.f, 11, INK3);
     }
 
     // Scroll hint
