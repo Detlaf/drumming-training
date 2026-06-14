@@ -2,7 +2,7 @@
 
 namespace drumming {
 
-const Voice VOICES[] = {
+const std::array<Voice, NUM_VOICES> VOICES = {{
     {49, "Crash",   -30.f, true,  {230, 220,  70}},
     {51, "Ride",    -18.f, true,  {230, 220,  70}},
     {42, "Hi-Hat",  - 6.f, true,  {230, 220,  70}},
@@ -12,8 +12,7 @@ const Voice VOICES[] = {
     {43, "Lo Tom",   42.f, false, { 43, 187, 251}},
     {36, "Bass",     66.f, false, {160, 100, 200}},
     {44, "HH Ped",   78.f, true,  {200, 180,  60}},
-};
-const int NUM_VOICES = (int)(sizeof(VOICES) / sizeof(VOICES[0]));
+}};
 
 // Electronic kits report the hi-hat on several note numbers depending on the
 // pedal position and strike zone. General MIDI uses 42 (closed) and 46 (open);

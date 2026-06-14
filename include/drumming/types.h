@@ -1,6 +1,8 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>
@@ -18,12 +20,12 @@ struct Voice {
     sf::Color   color;
 };
 
-extern const Voice VOICES[];
-extern const int   NUM_VOICES;
+inline constexpr int NUM_VOICES = 9;
+extern const std::array<Voice, NUM_VOICES> VOICES;
 
 int voiceIndex(int midiNote);
 
-enum class Screen { HOME, LIBRARY, STATS, EDITOR, PLAY };
+enum class Screen : std::uint8_t { HOME, LIBRARY, STATS, EDITOR, PLAY };
 
 struct HitResult {
     int   step, voice;
@@ -78,8 +80,10 @@ struct App {
 
     bool midiConnected = false;
 
-    int   totalSteps() const { return measures * STEPS_PER_MEASURE; }
-    float stepDurMs()  const { return 60000.f / bpm / STEPS_PER_BEAT; }
+    [[nodiscard]] int   totalSteps() const { return measures * STEPS_PER_MEASURE; }
+    [[nodiscard]] float stepDurMs()  const {
+        return 60000.f / static_cast<float>(bpm) / static_cast<float>(STEPS_PER_BEAT);
+    }
 };
 
 } // namespace drumming

@@ -9,6 +9,7 @@
 #include <SFML/Graphics.hpp>
 #include <RtMidi.h>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -26,7 +27,7 @@ using Clock = std::chrono::steady_clock;
 // app was launched.
 static std::string defaultDatabasePath() {
     const char* home = std::getenv("HOME");
-    if (!home) return "drumming.db";  // fall back to cwd if HOME is unset
+    if (home == nullptr) return "drumming.db";  // fall back to cwd if HOME is unset
     std::filesystem::path dir =
         std::filesystem::path(home) / "Library" / "Application Support" / "Drumming";
     std::error_code ec;
@@ -39,7 +40,7 @@ static void endSession(drumming::App& g) {
     if (!g.sessionActive) return;
     int dur = (int)std::chrono::duration<float>(Clock::now() - g.sessionStart).count();
     int ok  = 0;
-    for (auto& r : g.results) ok += r.correct;
+    for (auto& r : g.results) ok += static_cast<int>(r.correct);
     int total = (int)g.results.size();
 
     drumming::SessionRecord rec{};
@@ -272,7 +273,7 @@ int main() {
 
                 // Home screen card clicks + Resume button
                 if (g.screen == drumming::Screen::HOME && mx >= drumming::SIDEBAR_W) {
-                    drumming::Screen cardSc[] = {
+                    std::array<drumming::Screen, 3> cardSc = {
                         drumming::Screen::EDITOR,
                         drumming::Screen::LIBRARY,
                         drumming::Screen::STATS
@@ -302,7 +303,7 @@ int main() {
                         std::tie(step, vi) = drumming::pickCell({mx, my}, g.totalSteps());
                     if (step >= 0 && vi >= 0) {
                         auto key = std::make_pair(step, vi);
-                        if (g.groove.count(key)) g.groove.erase(key);
+                        if (g.groove.count(key) != 0) g.groove.erase(key);
                         else                     g.groove.insert(key);
                     }
                 }

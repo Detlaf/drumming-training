@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <vector>
 #include "drumming/types.h"
 
@@ -9,7 +10,7 @@ std::vector<MidiEv> pollMidi();
 
 // Hot-plug: what the main loop should do with the MIDI port given the current
 // connection state and the number of ports currently available.
-enum class MidiPortAction { None, Open, Close };
+enum class MidiPortAction : std::uint8_t { None, Open, Close };
 
 MidiPortAction decideMidiAction(bool currentlyConnected, unsigned int portCount);
 
