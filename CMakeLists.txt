@@ -23,6 +23,9 @@ elseif(UNIX)
 endif()
 
 # ── SFML ─────────────────────────────────────────────────────────────────────
+# Build SFML (and other fetched deps) statically so the .app bundle is
+# self-contained and can be launched from Finder without dangling dylibs.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 include(FetchContent)
 FetchContent_Declare(
     SFML
@@ -61,7 +64,9 @@ target_link_libraries(drumming_core PUBLIC
 )
 
 # ── drum_viz ─────────────────────────────────────────────────────────────────
-add_executable(drum_viz
+# On macOS this produces a double-clickable Drumming.app bundle; elsewhere a
+# plain executable.
+add_executable(drum_viz MACOSX_BUNDLE
     src/main.cpp
     src/audio.cpp
     src/draw.cpp
@@ -74,6 +79,16 @@ target_link_libraries(drum_viz PRIVATE
     SFML::Audio
     SFML::System
 )
+
+if(APPLE)
+    set_target_properties(drum_viz PROPERTIES
+        OUTPUT_NAME "Drumming"
+        MACOSX_BUNDLE_BUNDLE_NAME        "Drumming"
+        MACOSX_BUNDLE_GUI_IDENTIFIER     "com.drumming.training"
+        MACOSX_BUNDLE_BUNDLE_VERSION     "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
 
 # ── drums_in (MIDI debug tool) ────────────────────────────────────────────────
 add_executable(drums_in tools/drums_in.cpp)
