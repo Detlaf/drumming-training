@@ -49,4 +49,11 @@ inline constexpr int   BEATS_PER_MEASURE = 4;
 inline constexpr int   STEPS_PER_MEASURE = STEPS_PER_BEAT * BEATS_PER_MEASURE;
 inline constexpr float HIT_WINDOW_MS     = 80.f;
 
+// Cross-talk gate. Electronic-kit triggers pick up vibration from neighbouring
+// pads (and the hi-hat pedal), firing faint phantom note-ons — most visibly a
+// ghost hi-hat hit whenever a tom or the snare is struck. Reject note-ons below
+// this velocity so those ghosts don't get scored as real hits. Genuine strikes,
+// even soft ghost notes a drummer plays on purpose, sit comfortably above it.
+inline constexpr int   MIN_HIT_VELOCITY  = 12;
+
 } // namespace drumming
