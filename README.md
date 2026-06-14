@@ -51,8 +51,19 @@ cmake --build build
 
 ### Run
 
+On macOS the build produces a double-clickable application bundle,
+`build/Drumming.app`. Launch it from Finder (or drag it to `/Applications`):
+
 ```bash
-./build/drum_viz
+open build/Drumming.app
+# or install it once, then launch from Finder/Spotlight:
+cp -R build/Drumming.app /Applications/
+```
+
+The executable inside the bundle can also be run directly:
+
+```bash
+./build/Drumming.app/Contents/MacOS/Drumming
 ```
 
 A small MIDI debug tool is also built:
@@ -60,6 +71,10 @@ A small MIDI debug tool is also built:
 ```bash
 ./build/drums_in
 ```
+
+> **Data location.** Grooves and session history are stored in
+> `~/Library/Application Support/Drumming/drumming.db` so the app works the same
+> whether launched from Finder or the command line.
 
 ### Tests
 

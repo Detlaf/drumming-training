@@ -11,11 +11,29 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <iostream>
+#include <string>
 #include <tuple>
 
 using Clock = std::chrono::steady_clock;
+
+// When launched from Finder as a .app bundle, the working directory is "/", so a
+// relative "drumming.db" can't be created. Keep the database in the user's
+// Application Support directory instead, which is writable regardless of how the
+// app was launched.
+static std::string defaultDatabasePath() {
+    const char* home = std::getenv("HOME");
+    if (!home) return "drumming.db";  // fall back to cwd if HOME is unset
+    std::filesystem::path dir =
+        std::filesystem::path(home) / "Library" / "Application Support" / "Drumming";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return "drumming.db";
+    return (dir / "drumming.db").string();
+}
 
 static void endSession(drumming::App& g) {
     if (!g.sessionActive) return;
@@ -85,6 +103,8 @@ int main() {
     sf::SoundBuffer hiClickBuf = drumming::makeClick(1100.f);
     sf::SoundBuffer loClickBuf = drumming::makeClick(700.f);
     sf::Sound hiClick(hiClickBuf), loClick(loClickBuf);
+
+    drumming::setDatabasePath(defaultDatabasePath());
 
     drumming::App g;
     g.midiConnected = midiConnected;
