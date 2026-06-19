@@ -143,6 +143,20 @@ TEST_CASE("scoreHit - late hit on correct pad classifies LateCorrectPad", "[scor
     CHECK_FALSE(r.correct);
 }
 
+TEST_CASE("scoreHit - early/late detection holds at fast tempo", "[scoring]") {
+    // At 75ms/step a full step (75ms) is shorter than the 80ms hit window, so a
+    // 100ms-late hit grid-snaps onto an empty neighbouring step. It must still be
+    // classified against the real note as late-on-pad, not wrong-pad.
+    const float fast = 75.f;
+    HitResult late = scoreHit(4 * fast + 100.f, grooveAt(4, 5), 5, 16, fast);
+    CHECK(late.step == 4);
+    CHECK(late.cls  == HitClass::LateCorrectPad);
+
+    HitResult early = scoreHit(4 * fast - 100.f, grooveAt(4, 5), 5, 16, fast);
+    CHECK(early.step == 4);
+    CHECK(early.cls  == HitClass::EarlyCorrectPad);
+}
+
 TEST_CASE("scoreHit - hit on a pad with no groove note is WrongPad", "[scoring]") {
     const float dur = 125.f;
     // Groove has snare (voice 5) on step 4; play voice 7 on step 4.
