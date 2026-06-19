@@ -104,4 +104,10 @@ sf::FloatRect libraryDeleteRect(int rowFromTop) {
     return {{(float)WINDOW_W - 60.f, ry + 9.f}, {LIBRARY_DEL_BTN_W, 26.f}};
 }
 
+sf::FloatRect sessionButtonRect() {
+    constexpr float bw = 132.f, bh = 24.f;
+    float rightEdge = CARD_X + CARD_W;            // matches drawControls strip
+    return {{rightEdge - bw, CTRL_Y}, {bw, bh}};
+}
+
 }

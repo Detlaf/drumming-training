@@ -39,4 +39,7 @@ int           libraryRowAt(float my, int scroll, int count);
 // Delete button for the row at `rowFromTop` (0 = first visible row).
 sf::FloatRect libraryDeleteRect(int rowFromTop);
 
+// Play screen: the Start/Stop session button in the controls strip.
+sf::FloatRect sessionButtonRect();
+
 } // namespace drumming

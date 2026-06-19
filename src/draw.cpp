@@ -4,7 +4,9 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <map>
 #include <string>
+#include <vector>
 
 namespace drumming {
 
@@ -311,24 +313,39 @@ void drawControls(sf::RenderTarget& w, const sf::Font& font, const App& app) {
               (app.measures > 1 ? "s" : "") + "  [M/N]") + 8.f;
     x += pill(w, font, x, y, "Clear  [C]") + 8.f;
 
+    // Start/Stop session button (top-right of the strip)
+    if (app.screen == Screen::PLAY) {
+        sf::FloatRect b = sessionButtonRect();
+        sf::Color btnC = app.sessionActive ? BAD_C : GOOD_C;
+        fillRect(w, b.position.x, b.position.y, b.size.x, b.size.y, btnC);
+        strokeRect(w, b.position.x, b.position.y, b.size.x, b.size.y, btnC);
+        drawTextCenter(w, font, app.sessionActive ? "Stop session" : "Start session",
+                       b.position.x + b.size.x / 2.f, b.position.y + 5.f, 12, BG);
+    }
+
     if (app.screen == Screen::PLAY && !app.results.empty()) {
-        // Live accuracy strip: on-time / early / late buckets.
-        int good = 0, early = 0, late = 0;
+        // Live accuracy strip, by hit class: on-time / early / late / wrong pad.
+        int good = 0, early = 0, late = 0, wrong = 0;
         float sumAbs = 0.f;
-        for (auto& r : app.results) {
-            if (r.correct)            ++good;
-            else if (r.offsetMs < 0)  ++early;
-            else                      ++late;
+        for (const auto& r : app.results) {
+            switch (r.cls) {
+            case HitClass::Correct:         ++good;  break;
+            case HitClass::EarlyCorrectPad: ++early; break;
+            case HitClass::LateCorrectPad:  ++late;  break;
+            case HitClass::WrongPad:        ++wrong; break;
+            }
             sumAbs += std::abs(r.offsetMs);
         }
         int n  = (int)app.results.size();
         float ax = CARD_X + 12.f;
         float ay = y + 30.f;
-        drawText(w, font, "Live accuracy", ax, ay + 2.f, 12, INK);
+        drawText(w, font, app.sessionActive ? "Session live" : "Live accuracy",
+                 ax, ay + 2.f, 12, INK);
         ax += 96.f;
-        ax += accChip(w, font, ax, ay, "On time", 100 * good  / n, GOOD_C);
-        ax += accChip(w, font, ax, ay, "Early",   100 * early / n, WARN_C);
-        ax += accChip(w, font, ax, ay, "Late",    100 * late  / n, BAD_C);
+        ax += accChip(w, font, ax, ay, "On time",   100 * good  / n, GOOD_C);
+        ax += accChip(w, font, ax, ay, "Early",     100 * early / n, WARN_C);
+        ax += accChip(w, font, ax, ay, "Late",      100 * late  / n, BAD_C);
+        ax += accChip(w, font, ax, ay, "Wrong pad", 100 * wrong / n, INK2);
         drawText(w, font, "±" + std::to_string((int)(sumAbs / n)) + " ms avg",
                  ax + 8.f, ay + 2.f, 12, INK3);
     } else {
@@ -598,6 +615,23 @@ void drawLibraryScreen(sf::RenderTarget& w, const sf::Font& font, const App& app
                  listTop + listH + 6.f, 11, INK3);
 }
 
+// ── Stats helpers ─────────────────────────────────────────────────────────────
+// Local-midnight epoch (seconds) for the day containing `ts`. Sessions are
+// bucketed by this so they group per calendar day in the viewer's timezone.
+static long long dayStartEpoch(long long ts) {
+    time_t    t  = (time_t)ts;
+    struct tm lt = *localtime(&t);
+    lt.tm_hour = 0; lt.tm_min = 0; lt.tm_sec = 0; lt.tm_isdst = -1;
+    return (long long)mktime(&lt);
+}
+
+static std::string formatDay(long long dayEpoch, const char* fmt) {
+    char   buf[32] = {};
+    time_t t       = (time_t)dayEpoch;
+    strftime(buf, sizeof(buf), fmt, localtime(&t));
+    return buf;
+}
+
 // ── drawStatsScreen ───────────────────────────────────────────────────────────
 void drawStatsScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) {
     float cx = SIDEBAR_W + 26.f;
@@ -608,7 +642,7 @@ void drawStatsScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) 
     int   totalSessions = (int)app.history.size();
     float totalTimeSec  = 0.f, totalAcc = 0.f;
     int   accCount      = 0;
-    for (auto& s : app.history) {
+    for (const auto& s : app.history) {
         totalTimeSec += (float)s.durationSecs;
         if (s.totalNotes > 0) { totalAcc += s.accuracyPct; ++accCount; }
     }
@@ -642,53 +676,145 @@ void drawStatsScreen(sf::RenderTarget& w, const sf::Font& font, const App& app) 
                  stats[i].up ? GOOD_C : BAD_C);
     }
 
-    // Recent sessions card
-    float tableY = cy + cardH + 18.f;
-    fillRect(w, cx, tableY, cw, 28.f, BG3);
-    strokeRect(w, cx, tableY, cw, 28.f, LINE_C);
-    drawText(w, font, "Recent sessions", cx + 14.f, tableY + 7.f, 13, INK);
+    // ── Playing time per day (line chart) ────────────────────────────────────
+    float chartY = cy + cardH + 18.f;
+    float chartH = 188.f;
+    fillRect(w, cx, chartY, cw, chartH, BG);
+    strokeRect(w, cx, chartY, cw, chartH, LINE_C);
+    drawText(w, font, "Playing time per day", cx + 14.f, chartY + 10.f, 13, INK);
 
-    // Column anchors (x offsets from cx). Values sit a few px right of headers.
-    float colBpm  = cw - 360.f;
-    float colDate = cw - 290.f;
-    float colDur  = cw - 180.f;
-    float colAcc  = cw - 80.f;
+    if (app.history.empty()) {
+        drawText(w, font, "No sessions recorded yet.", cx + 14.f, chartY + 40.f, 13, INK3);
+    } else {
+        // Minutes per calendar day, over the last `kDays` ending today.
+        constexpr int kDays = 14;
+        std::map<long long, float> minsByDay;
+        for (const auto& s : app.history)
+            minsByDay[dayStartEpoch(s.timestampEpoch)] += (float)s.durationSecs / 60.f;
 
-    float hdrY = tableY + 36.f;
-    drawText(w, font, "Groove",    cx + 14.f,         hdrY, 11, INK3);
-    drawText(w, font, "BPM",       cx + colBpm,       hdrY, 11, INK3);
-    drawText(w, font, "Date",      cx + colDate,      hdrY, 11, INK3);
-    drawText(w, font, "Duration",  cx + colDur,       hdrY, 11, INK3);
-    drawText(w, font, "Accuracy",  cx + colAcc,       hdrY, 11, INK3);
-    hline(w, cx, cx + cw, hdrY + 16.f, LINE_C);
+        long long today = dayStartEpoch((long long)std::time(nullptr));
+        // Anchor the right edge to the more recent of today / latest session.
+        if (!minsByDay.empty())
+            today = std::max(today, minsByDay.rbegin()->first);
 
-    float rowY = hdrY + 24.f;
-    float rowH = 36.f;
-    int   shown = 0;
-    fillRect(w, cx, hdrY + 18.f, cw, std::max(1.f, (float)std::min((int)app.history.size(), 7)) * rowH, BG);
-    strokeRect(w, cx, hdrY + 18.f, cw, std::max(1.f, (float)std::min((int)app.history.size(), 7)) * rowH, LINE_C);
+        std::vector<long long> days(kDays);
+        std::vector<float>     mins(kDays, 0.f);
+        float maxMin = 1.f;
+        for (int i = 0; i < kDays; ++i) {
+            long long d = today - (long long)(kDays - 1 - i) * 86400LL;
+            days[i] = d;
+            auto it = minsByDay.find(d);
+            if (it != minsByDay.end()) mins[i] = it->second;
+            maxMin = std::max(maxMin, mins[i]);
+        }
 
-    for (int i = (int)app.history.size() - 1; i >= 0 && shown < 7; --i, ++shown) {
-        const auto& s = app.history[i];
-        if (shown > 0) hline(w, cx, cx + cw, rowY, HAIR_C);
-        drawText(w, font, s.grooveName,          cx + 14.f,        rowY + 10.f, 13, INK);
-        drawText(w, font, std::to_string(s.bpm), cx + colBpm + 5.f, rowY + 10.f, 12, INK2);
+        // Plot frame
+        float plotL = cx + 50.f;
+        float plotR = cx + cw - 18.f;
+        float plotT = chartY + 34.f;
+        float plotB = chartY + chartH - 26.f;
+        float plotW = plotR - plotL;
+        float plotH = plotB - plotT;
 
-        char buf[32] = {};
-        time_t ts = (time_t)s.timestampEpoch;
-        strftime(buf, sizeof(buf), "%b %d", localtime(&ts));
-        drawText(w, font, buf, cx + colDate + 5.f, rowY + 10.f, 12, INK2);
+        // Horizontal gridlines + y-axis labels (minutes), 4 divisions.
+        for (int g = 0; g <= 4; ++g) {
+            float gy  = plotB - plotH * (float)g / 4.f;
+            int   val = (int)std::round(maxMin * (float)g / 4.f);
+            hline(w, plotL, plotR, gy, g == 0 ? LINE_C : HAIR_C);
+            drawText(w, font, std::to_string(val) + "m", cx + 14.f, gy - 7.f, 10, INK3);
+        }
 
-        char durBuf[16] = {};
-        snprintf(durBuf, sizeof(durBuf), "%d:%02d", s.durationSecs / 60, s.durationSecs % 60);
-        drawText(w, font, durBuf, cx + colDur + 5.f, rowY + 10.f, 12, INK2);
+        auto px = [&](int i) { return plotL + plotW * (float)i / (float)(kDays - 1); };
+        auto py = [&](float m) { return plotB - plotH * (m / maxMin); };
 
-        drawText(w, font, std::to_string((int)s.accuracyPct) + "%", cx + colAcc + 5.f, rowY + 10.f, 13, INK);
-        rowY += rowH;
+        // Polyline + markers
+        for (int i = 0; i < kDays; ++i) {
+            if (i > 0) {
+                sf::Vertex seg[2];
+                seg[0].position = {px(i - 1), py(mins[i - 1])};
+                seg[1].position = {px(i),     py(mins[i])};
+                seg[0].color = ACCENT; seg[1].color = ACCENT;
+                w.draw(seg, 2, sf::PrimitiveType::Lines);
+            }
+        }
+        for (int i = 0; i < kDays; ++i) {
+            sf::CircleShape dot(3.f);
+            dot.setOrigin({3.f, 3.f});
+            dot.setPosition({px(i), py(mins[i])});
+            dot.setFillColor(mins[i] > 0.f ? ACCENT : INK3);
+            w.draw(dot);
+        }
+
+        // X-axis date labels (every other day to avoid crowding)
+        for (int i = 0; i < kDays; i += 2)
+            drawText(w, font, formatDay(days[i], "%b %d"),
+                     px(i) - 14.f, plotB + 6.f, 9, INK3);
     }
 
-    if (app.history.empty())
-        drawText(w, font, "No sessions recorded yet.", cx + 14.f, rowY + 8.f, 13, INK3);
+    // ── Sessions grouped by date and groove ──────────────────────────────────
+    float tableY = chartY + chartH + 16.f;
+    fillRect(w, cx, tableY, cw, 28.f, BG3);
+    strokeRect(w, cx, tableY, cw, 28.f, LINE_C);
+    drawText(w, font, "Sessions by date & groove", cx + 14.f, tableY + 7.f, 13, INK);
+
+    // Column anchors
+    float colCount = cw - 360.f;
+    float colBpm   = cw - 270.f;
+    float colDur   = cw - 180.f;
+    float colAcc   = cw - 80.f;
+
+    float hdrY = tableY + 36.f;
+    drawText(w, font, "Groove",    cx + 28.f,    hdrY, 11, INK3);
+    drawText(w, font, "Sessions",  cx + colCount, hdrY, 11, INK3);
+    drawText(w, font, "BPM",       cx + colBpm,   hdrY, 11, INK3);
+    drawText(w, font, "Duration",  cx + colDur,   hdrY, 11, INK3);
+    drawText(w, font, "Accuracy",  cx + colAcc,   hdrY, 11, INK3);
+    hline(w, cx, cx + cw, hdrY + 16.f, LINE_C);
+
+    if (app.history.empty()) {
+        drawText(w, font, "No sessions recorded yet.", cx + 14.f, hdrY + 26.f, 13, INK3);
+        return;
+    }
+
+    // Aggregate per (day, groove). Iterate newest-first; std::map keeps days
+    // ascending and grooves alphabetical, so we walk days in reverse.
+    struct Agg { int count = 0, dur = 0; float accSum = 0.f; int accN = 0; int bpm = 0; bool bpmUniform = true; };
+    std::map<long long, std::map<std::string, Agg>> byDay;
+    for (const auto& s : app.history) {
+        Agg& a = byDay[dayStartEpoch(s.timestampEpoch)][s.grooveName];
+        a.count += 1;
+        a.dur   += s.durationSecs;
+        if (s.totalNotes > 0) { a.accSum += s.accuracyPct; ++a.accN; }
+        if (a.count == 1) a.bpm = s.bpm;
+        else if (a.bpm != s.bpm) a.bpmUniform = false;
+    }
+
+    float rowY   = hdrY + 26.f;
+    float rowH   = 30.f;
+    float limitY = (float)WINDOW_H - 16.f;   // stop before running off-screen
+    for (auto dit = byDay.rbegin(); dit != byDay.rend() && rowY < limitY; ++dit) {
+        // Date header band
+        fillRect(w, cx, rowY, cw, 22.f, BG2);
+        drawText(w, font, formatDay(dit->first, "%A, %b %d"), cx + 14.f, rowY + 5.f, 11, INK2);
+        rowY += 26.f;
+
+        for (const auto& [groove, a] : dit->second) {
+            if (rowY >= limitY) break;
+            drawText(w, font, groove, cx + 28.f, rowY, 13, INK);
+            drawText(w, font, std::to_string(a.count), cx + colCount + 5.f, rowY, 12, INK2);
+            drawText(w, font, a.bpmUniform ? std::to_string(a.bpm) : "—",
+                     cx + colBpm + 5.f, rowY, 12, INK2);
+
+            char durBuf[16] = {};
+            snprintf(durBuf, sizeof(durBuf), "%d:%02d", a.dur / 60, a.dur % 60);
+            drawText(w, font, durBuf, cx + colDur + 5.f, rowY, 12, INK2);
+
+            int avg = a.accN > 0 ? (int)(a.accSum / a.accN) : 0;
+            drawText(w, font, a.accN > 0 ? std::to_string(avg) + "%" : "—",
+                     cx + colAcc + 5.f, rowY, 13, INK);
+            rowY += rowH;
+        }
+    }
 }
 
 // ── drawNamingOverlay ─────────────────────────────────────────────────────────

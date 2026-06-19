@@ -115,6 +115,49 @@ TEST_CASE("scoreHit - unrecognized pad (voice -1) is always incorrect", "[scorin
     CHECK_FALSE(r.correct);
 }
 
+// ── scoreHit: hit classification ────────────────────────────────────────────
+
+TEST_CASE("scoreHit - on-time hit on a groove cell is Correct", "[scoring]") {
+    const float dur = 125.f;
+    HitResult r = scoreHit(4 * dur, grooveAt(4, 5), 5, 16, dur);
+    CHECK(r.cls == HitClass::Correct);
+    CHECK(r.correct);
+}
+
+// At a slow tempo (dur=250ms) half a step is 125ms, wider than the 80ms hit
+// window, so a hit can snap to the right step yet still fall outside the window.
+TEST_CASE("scoreHit - early hit on correct pad classifies EarlyCorrectPad", "[scoring]") {
+    const float dur = 250.f;
+    // 100ms early — past the 80ms window but still snaps to step 4.
+    HitResult r = scoreHit(4 * dur - 100.f, grooveAt(4, 5), 5, 16, dur);
+    CHECK(r.step == 4);
+    CHECK(r.cls  == HitClass::EarlyCorrectPad);
+    CHECK_FALSE(r.correct);
+}
+
+TEST_CASE("scoreHit - late hit on correct pad classifies LateCorrectPad", "[scoring]") {
+    const float dur = 250.f;
+    HitResult r = scoreHit(4 * dur + 100.f, grooveAt(4, 5), 5, 16, dur);
+    CHECK(r.step == 4);
+    CHECK(r.cls  == HitClass::LateCorrectPad);
+    CHECK_FALSE(r.correct);
+}
+
+TEST_CASE("scoreHit - hit on a pad with no groove note is WrongPad", "[scoring]") {
+    const float dur = 125.f;
+    // Groove has snare (voice 5) on step 4; play voice 7 on step 4.
+    HitResult r = scoreHit(4 * dur, grooveAt(4, 5), 7, 16, dur);
+    CHECK(r.cls == HitClass::WrongPad);
+    CHECK_FALSE(r.correct);
+}
+
+TEST_CASE("scoreHit - unrecognized pad (voice -1) is WrongPad", "[scoring]") {
+    const float dur = 125.f;
+    HitResult r = scoreHit(4 * dur, grooveAt(4, 5), -1, 16, dur);
+    CHECK(r.cls == HitClass::WrongPad);
+    CHECK_FALSE(r.correct);
+}
+
 // ── accuracyPct ─────────────────────────────────────────────────────────────
 
 TEST_CASE("accuracyPct - zero notes yields 0", "[scoring]") {

@@ -129,6 +129,11 @@ static SessionRecord makeRecord(const std::string& name, long long when) {
     r.accuracyPct    = 75.f;
     r.timestampEpoch = when;
     r.durationSecs   = 42;
+    r.earlyHits      = 2;
+    r.lateHits       = 1;
+    r.wrongPadHits   = 1;
+    r.startedAtEpoch = when;
+    r.endedAtEpoch   = when + 42;
     return r;
 }
 
@@ -151,6 +156,11 @@ TEST_CASE("appendHistory/loadHistory - a session record round-trips", "[persiste
     CHECK_THAT(r.accuracyPct, WithinAbs(75.f, 1e-3f));
     CHECK(r.timestampEpoch == 1700000000LL);
     CHECK(r.durationSecs   == 42);
+    CHECK(r.earlyHits      == 2);
+    CHECK(r.lateHits       == 1);
+    CHECK(r.wrongPadHits   == 1);
+    CHECK(r.startedAtEpoch == 1700000000LL);
+    CHECK(r.endedAtEpoch   == 1700000000LL + 42);
 }
 
 TEST_CASE("appendHistory - appends to the in-memory history immediately", "[persistence]") {

@@ -38,7 +38,12 @@ static const char* kSchema =
     "  total_notes   INTEGER NOT NULL,"
     "  accuracy_pct  REAL    NOT NULL,"
     "  played_at     INTEGER NOT NULL,"
-    "  duration_secs INTEGER NOT NULL"
+    "  duration_secs INTEGER NOT NULL,"
+    "  early_hits    INTEGER NOT NULL DEFAULT 0,"
+    "  late_hits     INTEGER NOT NULL DEFAULT 0,"
+    "  wrong_pad_hits INTEGER NOT NULL DEFAULT 0,"
+    "  started_at    INTEGER NOT NULL DEFAULT 0,"
+    "  ended_at      INTEGER NOT NULL DEFAULT 0"
     ");"
     "CREATE INDEX IF NOT EXISTS idx_sessions_groove   ON sessions(groove_name);"
     "CREATE INDEX IF NOT EXISTS idx_sessions_playedat ON sessions(played_at);";
@@ -59,6 +64,19 @@ static sqlite3* db() {
         std::fprintf(stderr, "sqlite: schema error: %s\n", err ? err : "?");
         sqlite3_free(err);
     }
+
+    // Migrate databases created before these columns existed. ADD COLUMN fails
+    // harmlessly with "duplicate column name" once they're present, so the
+    // errors are swallowed deliberately.
+    static const char* kMigrations[] = {
+        "ALTER TABLE sessions ADD COLUMN early_hits     INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE sessions ADD COLUMN late_hits      INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE sessions ADD COLUMN wrong_pad_hits INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE sessions ADD COLUMN started_at     INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE sessions ADD COLUMN ended_at       INTEGER NOT NULL DEFAULT 0;",
+    };
+    for (const char* m : kMigrations)
+        sqlite3_exec(gHandle, m, nullptr, nullptr, nullptr);
 
     return gHandle;
 }
@@ -160,7 +178,8 @@ void loadHistory(App& app) {
     sqlite3_stmt* st = nullptr;
     const char* sql =
         "SELECT groove_name, bpm, measures, correct_hits, total_notes,"
-        "       accuracy_pct, played_at, duration_secs"
+        "       accuracy_pct, played_at, duration_secs,"
+        "       early_hits, late_hits, wrong_pad_hits, started_at, ended_at"
         "  FROM sessions ORDER BY played_at;";
     if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) != SQLITE_OK) return;
 
@@ -174,6 +193,11 @@ void loadHistory(App& app) {
         r.accuracyPct    = (float)sqlite3_column_double(st, 5);
         r.timestampEpoch = sqlite3_column_int64(st, 6);
         r.durationSecs   = sqlite3_column_int(st, 7);
+        r.earlyHits      = sqlite3_column_int(st, 8);
+        r.lateHits       = sqlite3_column_int(st, 9);
+        r.wrongPadHits   = sqlite3_column_int(st, 10);
+        r.startedAtEpoch = sqlite3_column_int64(st, 11);
+        r.endedAtEpoch   = sqlite3_column_int64(st, 12);
         app.history.push_back(std::move(r));
     }
     sqlite3_finalize(st);
@@ -188,18 +212,24 @@ void appendHistory(App& app, const SessionRecord& rec) {
     sqlite3_stmt* st = nullptr;
     const char* sql =
         "INSERT INTO sessions (groove_name, bpm, measures, correct_hits,"
-        "  total_notes, accuracy_pct, played_at, duration_secs)"
-        " VALUES (?,?,?,?,?,?,?,?);";
+        "  total_notes, accuracy_pct, played_at, duration_secs,"
+        "  early_hits, late_hits, wrong_pad_hits, started_at, ended_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);";
     if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) != SQLITE_OK) return;
 
-    sqlite3_bind_text  (st, 1, rec.grooveName.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int   (st, 2, rec.bpm);
-    sqlite3_bind_int   (st, 3, rec.measures);
-    sqlite3_bind_int   (st, 4, rec.correctHits);
-    sqlite3_bind_int   (st, 5, rec.totalNotes);
-    sqlite3_bind_double(st, 6, rec.accuracyPct);
-    sqlite3_bind_int64 (st, 7, rec.timestampEpoch);
-    sqlite3_bind_int   (st, 8, rec.durationSecs);
+    sqlite3_bind_text  (st,  1, rec.grooveName.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int   (st,  2, rec.bpm);
+    sqlite3_bind_int   (st,  3, rec.measures);
+    sqlite3_bind_int   (st,  4, rec.correctHits);
+    sqlite3_bind_int   (st,  5, rec.totalNotes);
+    sqlite3_bind_double(st,  6, rec.accuracyPct);
+    sqlite3_bind_int64 (st,  7, rec.timestampEpoch);
+    sqlite3_bind_int   (st,  8, rec.durationSecs);
+    sqlite3_bind_int   (st,  9, rec.earlyHits);
+    sqlite3_bind_int   (st, 10, rec.lateHits);
+    sqlite3_bind_int   (st, 11, rec.wrongPadHits);
+    sqlite3_bind_int64 (st, 12, rec.startedAtEpoch);
+    sqlite3_bind_int64 (st, 13, rec.endedAtEpoch);
     sqlite3_step(st);
     sqlite3_finalize(st);
 }

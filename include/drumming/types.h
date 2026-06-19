@@ -27,10 +27,18 @@ int voiceIndex(int midiNote);
 
 enum class Screen : std::uint8_t { HOME, LIBRARY, STATS, EDITOR, PLAY };
 
+// How a single hit relates to the groove at its snapped step:
+//   Correct          right pad, within HIT_WINDOW_MS
+//   EarlyCorrectPad  right pad, struck too early (offset <= -HIT_WINDOW_MS)
+//   LateCorrectPad   right pad, struck too late  (offset >=  HIT_WINDOW_MS)
+//   WrongPad         no groove note on that {step,voice} (incl. unknown pad)
+enum class HitClass : std::uint8_t { Correct, EarlyCorrectPad, LateCorrectPad, WrongPad };
+
 struct HitResult {
-    int   step, voice;
-    float offsetMs;
-    bool  correct;
+    int      step, voice;
+    float    offsetMs;
+    bool     correct;
+    HitClass cls;
 };
 
 struct MidiEv {
@@ -49,8 +57,12 @@ struct SessionRecord {
     int bpm, measures;
     int correctHits, totalNotes;
     float accuracyPct;
-    long long timestampEpoch;
+    long long timestampEpoch;   // kept = startedAtEpoch for back-compat
     int durationSecs;
+    // Hit breakdown (spec 2)
+    int earlyHits = 0, lateHits = 0, wrongPadHits = 0;
+    // Session start/end wall-clock epochs (spec 1)
+    long long startedAtEpoch = 0, endedAtEpoch = 0;
 };
 
 struct App {
@@ -72,6 +84,11 @@ struct App {
     std::string currentGrooveName;
     bool sessionActive = false;
     std::chrono::steady_clock::time_point sessionStart;
+    long long sessionStartEpoch = 0;
+    // Hit tally accumulated across the whole active session (the per-loop
+    // `results` buffer is cleared each loop for the live strip, so session totals
+    // are kept separately here).
+    int sCorrect = 0, sEarly = 0, sLate = 0, sWrong = 0;
     int libraryScroll = 0;
 
     // Groove naming overlay

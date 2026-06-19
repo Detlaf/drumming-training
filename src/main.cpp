@@ -36,12 +36,23 @@ static std::string defaultDatabasePath() {
     return (dir / "drumming.db").string();
 }
 
+// Begin an explicit session: reset the accumulated tally and record the start
+// wall-clock time. Hits scored while sessionActive is true are tallied below.
+static void startSession(drumming::App& g) {
+    g.sessionActive     = true;
+    g.sessionStart      = Clock::now();
+    g.sessionStartEpoch = (long long)std::time(nullptr);
+    g.sCorrect = g.sEarly = g.sLate = g.sWrong = 0;
+    g.results.clear();
+}
+
 static void endSession(drumming::App& g) {
     if (!g.sessionActive) return;
-    int dur = (int)std::chrono::duration<float>(Clock::now() - g.sessionStart).count();
-    int ok  = 0;
-    for (auto& r : g.results) ok += static_cast<int>(r.correct);
-    int total = (int)g.results.size();
+    long long startEpoch = g.sessionStartEpoch;
+    long long endEpoch   = (long long)std::time(nullptr);
+    int dur   = (int)std::chrono::duration<float>(Clock::now() - g.sessionStart).count();
+    int ok    = g.sCorrect;
+    int total = g.sCorrect + g.sEarly + g.sLate + g.sWrong;
 
     drumming::SessionRecord rec{};
     rec.grooveName     = g.currentGrooveName.empty() ? "<unsaved>" : g.currentGrooveName;
@@ -50,8 +61,13 @@ static void endSession(drumming::App& g) {
     rec.correctHits    = ok;
     rec.totalNotes     = total;
     rec.accuracyPct    = drumming::accuracyPct(ok, total);
-    rec.timestampEpoch = (long long)std::time(nullptr);
+    rec.timestampEpoch = startEpoch;
     rec.durationSecs   = dur;
+    rec.earlyHits      = g.sEarly;
+    rec.lateHits       = g.sLate;
+    rec.wrongPadHits   = g.sWrong;
+    rec.startedAtEpoch = startEpoch;
+    rec.endedAtEpoch   = endEpoch;
 
     drumming::appendHistory(g, rec);
     g.sessionActive = false;
@@ -232,6 +248,14 @@ int main() {
                 float mx = (float)mb->position.x;
                 float my = (float)mb->position.y;
 
+                // Play screen: Start/Stop session button
+                if (g.screen == drumming::Screen::PLAY &&
+                    mb->button == sf::Mouse::Button::Left &&
+                    drumming::sessionButtonRect().contains({mx, my})) {
+                    if (g.sessionActive) endSession(g);
+                    else                 startSession(g);
+                }
+
                 // Sidebar nav
                 if (g.screen != drumming::Screen::PLAY) {
                     if (auto hit = drumming::sidebarNavHit({mx, my}))
@@ -347,8 +371,19 @@ int main() {
                 int   vi = drumming::voiceIndex(ev.note);
                 float ms = std::chrono::duration<float, std::milli>(
                                ev.time - g.playStart).count();
-                g.results.push_back(drumming::scoreHit(
-                    ms, g.groove, vi, g.totalSteps(), g.stepDurMs()));
+                drumming::HitResult hr = drumming::scoreHit(
+                    ms, g.groove, vi, g.totalSteps(), g.stepDurMs());
+                g.results.push_back(hr);
+
+                // Accumulate session statistics while a session is running.
+                if (g.sessionActive) {
+                    switch (hr.cls) {
+                    case drumming::HitClass::Correct:         ++g.sCorrect; break;
+                    case drumming::HitClass::EarlyCorrectPad: ++g.sEarly;   break;
+                    case drumming::HitClass::LateCorrectPad:  ++g.sLate;    break;
+                    case drumming::HitClass::WrongPad:        ++g.sWrong;   break;
+                    }
+                }
             }
         }
 
@@ -361,9 +396,8 @@ int main() {
             int   step    = rawStep % g.totalSteps();
 
             if (loop > g.loopCount) {
-                g.loopCount     = loop;
-                g.results.clear();
-                g.sessionActive = true;
+                g.loopCount = loop;
+                g.results.clear();  // live strip shows the current loop only
             }
             g.currentStep = step;
 
