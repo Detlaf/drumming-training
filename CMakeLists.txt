@@ -22,20 +22,15 @@ elseif(UNIX)
     target_link_libraries(rtmidi PUBLIC asound pthread)
 endif()
 
-# ── SFML ─────────────────────────────────────────────────────────────────────
-# Build SFML (and other fetched deps) statically so the .app bundle is
-# self-contained and can be launched from Finder without dangling dylibs.
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-include(FetchContent)
-FetchContent_Declare(
-    SFML
-    GIT_REPOSITORY https://github.com/SFML/SFML.git
-    GIT_TAG        3.0.0
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(SFML)
+# ── Qt 6 ─────────────────────────────────────────────────────────────────────
+# Replaces SFML: Widgets (UI), Gui (QPainter staff/grid), Multimedia (metronome).
+# macOS bundles Qt frameworks via macdeployqt (see README), so no static-link
+# of fetched deps is needed.
+find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Multimedia)
+set(CMAKE_AUTOMOC ON)
 
 # ── Catch2 ───────────────────────────────────────────────────────────────────
+include(FetchContent)
 FetchContent_Declare(
     Catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -48,6 +43,7 @@ FetchContent_MakeAvailable(Catch2)
 find_package(SQLite3 REQUIRED)
 
 # ── drumming_core (shared between drum_viz and tests) ─────────────────────────
+# Stays Qt-free so drumming_tests builds without a GUI toolkit.
 add_library(drumming_core STATIC
     src/midi.cpp
     src/types.cpp
@@ -58,45 +54,65 @@ add_library(drumming_core STATIC
 target_include_directories(drumming_core PUBLIC include)
 target_link_libraries(drumming_core PUBLIC
     rtmidi
-    SFML::Graphics
-    SFML::System
-    SQLite::SQLite3
+    SQLite3::SQLite3
 )
 
 # ── drum_viz ─────────────────────────────────────────────────────────────────
 # On macOS this produces a double-clickable Drumming.app bundle; elsewhere a
-# plain executable.
+# plain executable. The Qt UI sources land across migration steps 3–5; the
+# target is defined once they are all present so the project keeps configuring
+# (and drumming_tests keeps building) mid-migration.
 set(DRUM_VIZ_SOURCES
     src/main.cpp
     src/audio.cpp
-    src/draw.cpp
+    src/controller.cpp
 )
-if(APPLE)
-    set(DRUM_VIZ_ICON "${CMAKE_SOURCE_DIR}/resources/AppIcon.icns")
-    list(APPEND DRUM_VIZ_SOURCES "${DRUM_VIZ_ICON}")
-endif()
-add_executable(drum_viz MACOSX_BUNDLE ${DRUM_VIZ_SOURCES})
-target_include_directories(drum_viz PRIVATE include)
-target_link_libraries(drum_viz PRIVATE
-    drumming_core
-    SFML::Graphics
-    SFML::Window
-    SFML::Audio
-    SFML::System
-)
+file(GLOB DRUM_VIZ_UI_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/ui/*.cpp")
+list(APPEND DRUM_VIZ_SOURCES ${DRUM_VIZ_UI_SOURCES})
 
-if(APPLE)
-    set_target_properties(drum_viz PROPERTIES
-        OUTPUT_NAME "Drumming"
-        MACOSX_BUNDLE_BUNDLE_NAME        "Drumming"
-        MACOSX_BUNDLE_GUI_IDENTIFIER     "com.drumming.training"
-        MACOSX_BUNDLE_BUNDLE_VERSION     "1.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
-        MACOSX_BUNDLE_ICON_FILE          "AppIcon"
+set(DRUM_VIZ_READY TRUE)
+foreach(_src ${DRUM_VIZ_SOURCES})
+    if(NOT EXISTS "${_src}" AND NOT IS_ABSOLUTE "${_src}")
+        if(NOT EXISTS "${CMAKE_SOURCE_DIR}/${_src}")
+            set(DRUM_VIZ_READY FALSE)
+        endif()
+    endif()
+endforeach()
+if(NOT DRUM_VIZ_UI_SOURCES)
+    set(DRUM_VIZ_READY FALSE)
+endif()
+
+if(DRUM_VIZ_READY)
+    if(APPLE)
+        set(DRUM_VIZ_ICON "${CMAKE_SOURCE_DIR}/resources/AppIcon.icns")
+        list(APPEND DRUM_VIZ_SOURCES "${DRUM_VIZ_ICON}")
+    endif()
+    add_executable(drum_viz MACOSX_BUNDLE ${DRUM_VIZ_SOURCES})
+    target_include_directories(drum_viz PRIVATE include)
+    target_link_libraries(drum_viz PRIVATE
+        drumming_core
+        Qt6::Widgets
+        Qt6::Gui
+        Qt6::Multimedia
     )
-    set_source_files_properties("${DRUM_VIZ_ICON}" PROPERTIES
-        MACOSX_PACKAGE_LOCATION "Resources"
-    )
+
+    if(APPLE)
+        set_target_properties(drum_viz PROPERTIES
+            OUTPUT_NAME "Drumming"
+            MACOSX_BUNDLE_BUNDLE_NAME        "Drumming"
+            MACOSX_BUNDLE_GUI_IDENTIFIER     "com.drumming.training"
+            MACOSX_BUNDLE_BUNDLE_VERSION     "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+            MACOSX_BUNDLE_ICON_FILE          "AppIcon"
+        )
+        set_source_files_properties("${DRUM_VIZ_ICON}" PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources"
+        )
+    endif()
+else()
+    message(STATUS
+        "drum_viz target skipped: Qt UI sources not present yet "
+        "(expected during Qt migration steps 3–6).")
 endif()
 
 # ── drums_in (MIDI debug tool) ────────────────────────────────────────────────
