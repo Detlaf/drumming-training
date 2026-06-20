@@ -36,9 +36,20 @@ The sidebar switches between:
 ### Requirements
 
 - A C++17 compiler and CMake ≥ 3.15
-- Qt 6 (Widgets, Gui, Multimedia) — install it from your platform's package
-  manager or the Qt installer (e.g. `brew install qt` on macOS, or
-  `qt6-base-dev qt6-multimedia-dev` on Debian/Ubuntu)
+- Qt 6 (Widgets, Gui, Multimedia). On Debian/Ubuntu install
+  `qt6-base-dev qt6-multimedia-dev`. On macOS use an **official** Qt build
+  (not Homebrew): Homebrew splits Qt across many kegs, which breaks
+  `macdeployqt`. The easiest way to get an official build is `aqtinstall`:
+
+  ```bash
+  python3 -m pip install --user aqtinstall
+  python3 -m aqt install-qt mac desktop 6.11.1 --modules qtmultimedia \
+      --outputdir "$HOME/Qt"
+  ```
+
+  This installs to `~/Qt/6.11.1/macos`. (Pick a version that matches your
+  macOS SDK — older Qt, e.g. 6.8 LTS, links the removed `AGL` framework and
+  fails to build on recent SDKs.)
 - SQLite3 (system library)
 - macOS or Linux (Linux uses ALSA; install ALSA dev packages)
 
@@ -51,15 +62,23 @@ cmake -S . -B build
 cmake --build build
 ```
 
+On macOS, point CMake at the official Qt installed above:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/Qt/6.11.1/macos"
+cmake --build build
+```
+
 ### Run
 
 On macOS the build produces a double-clickable application bundle,
 `build/Drumming.app`. To make the bundle self-contained (copying the Qt
 frameworks into it so it runs on machines without Qt installed), run
-`macdeployqt` once after building:
+`macdeployqt` once after building. Use the `macdeployqt` from the same
+official Qt you built against (not whatever is on `PATH`):
 
 ```bash
-macdeployqt build/Drumming.app
+~/Qt/6.11.1/macos/bin/macdeployqt build/Drumming.app
 ```
 
 Launch it from Finder (or drag it to `/Applications`):
@@ -75,6 +94,45 @@ The executable inside the bundle can also be run directly:
 ```bash
 ./build/Drumming.app/Contents/MacOS/Drumming
 ```
+
+### Distribution (macOS: Developer ID signing + notarization)
+
+The `macdeployqt` bundle runs fine locally, but to share it with other people
+without Gatekeeper warnings ("Apple cannot check it for malicious software")
+it must be signed with a **Developer ID Application** certificate and
+**notarized** by Apple. One-time setup:
+
+1. **Join the Apple Developer Program** (paid, ~$99/yr) at
+   <https://developer.apple.com/programs/>.
+2. **Create a Developer ID Application certificate** and install it in your
+   login keychain — easiest via Xcode › Settings › Accounts › (your team) ›
+   Manage Certificates › `+` › *Developer ID Application*. Verify with:
+
+   ```bash
+   security find-identity -v -p codesigning   # should list "Developer ID Application: …"
+   ```
+3. **Store notarization credentials** once (uses an app-specific password from
+   <https://account.apple.com> › Sign-In and Security; or an App Store Connect
+   API key):
+
+   ```bash
+   xcrun notarytool store-credentials drumming-notary \
+       --apple-id "you@example.com" --team-id "ABCDE12345" \
+       --password "abcd-efgh-ijkl-mnop"
+   ```
+
+Then sign, notarize, and staple in one step after building + `macdeployqt`:
+
+```bash
+tools/sign_and_notarize.sh build/Drumming.app
+```
+
+The script signs all nested frameworks/dylibs/plugins inside-out with the
+hardened runtime, submits the bundle to Apple's notary service, waits for the
+result, staples the ticket, and verifies with `spctl`. Override the identity or
+profile via the `IDENTITY` / `NOTARY_PROFILE` environment variables (see the
+header of the script). Distribute the resulting bundle inside a `.dmg` or
+`.zip`.
 
 A small MIDI debug tool is also built:
 
