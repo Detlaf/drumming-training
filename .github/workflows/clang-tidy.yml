@@ -19,23 +19,17 @@ jobs:
         sudo apt-get install -y \
           clang-tidy \
           libasound2-dev \
-          libgl1-mesa-dev \
           libudev-dev \
-          libfreetype-dev \
-          libflac-dev \
-          libvorbis-dev \
-          libopenal-dev \
-          libxrandr-dev \
-          libxcursor-dev \
-          libxi-dev
+          qt6-base-dev \
+          qt6-multimedia-dev
 
     - name: Configure CMake
       # Export compile_commands.json so clang-tidy knows each file's flags.
       run: cmake -B ${{github.workspace}}/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: Build dependencies
-      # Build everything first so the fetched SFML libraries and Catch2's
-      # generated headers exist before clang-tidy parses our translation units.
+      # Build everything first so Catch2's generated headers and Qt's AUTOMOC
+      # output exist before clang-tidy parses our translation units.
       run: cmake --build ${{github.workspace}}/build
 
     - name: Run clang-tidy
