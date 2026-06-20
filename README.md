@@ -6,10 +6,9 @@ accurately you play them back against a metronome. Grooves and practice sessions
 are saved to a local SQLite database, with a library and stats view to track
 progress over time.
 
-The UI is a single SFML window styled after a macOS app: a sidebar for
-navigation, a title bar, and per-screen content. The whole scene is rendered to
-a 2× supersampled off-screen target and downsampled, so text and edges stay
-sharp on standard-DPI displays.
+The UI is a Qt 6 Widgets application styled after a macOS app: a sidebar for
+navigation, a title bar, and per-screen content. The practice staff/grid is a
+custom-painted widget; everything else is native Qt widgets.
 
 ## Features
 
@@ -37,10 +36,13 @@ The sidebar switches between:
 ### Requirements
 
 - A C++17 compiler and CMake ≥ 3.15
+- Qt 6 (Widgets, Gui, Multimedia) — install it from your platform's package
+  manager or the Qt installer (e.g. `brew install qt` on macOS, or
+  `qt6-base-dev qt6-multimedia-dev` on Debian/Ubuntu)
 - SQLite3 (system library)
-- macOS or Linux (Linux uses ALSA; install ALSA + X11 input dev packages)
+- macOS or Linux (Linux uses ALSA; install ALSA dev packages)
 
-SFML 3.0, RtMidi (bundled), and Catch2 are fetched/built automatically by CMake.
+RtMidi (bundled) and Catch2 are fetched/built automatically by CMake.
 
 ### Build
 
@@ -52,7 +54,15 @@ cmake --build build
 ### Run
 
 On macOS the build produces a double-clickable application bundle,
-`build/Drumming.app`. Launch it from Finder (or drag it to `/Applications`):
+`build/Drumming.app`. To make the bundle self-contained (copying the Qt
+frameworks into it so it runs on machines without Qt installed), run
+`macdeployqt` once after building:
+
+```bash
+macdeployqt build/Drumming.app
+```
+
+Launch it from Finder (or drag it to `/Applications`):
 
 ```bash
 open build/Drumming.app
@@ -104,8 +114,8 @@ against the expected notes, and a completed loop is recorded as a session.
 
 ```
 include/drumming/   public headers (types, constants, midi, geometry,
-                    scoring, persistence, audio, draw)
-src/                implementation; main.cpp drives the app loop
+                    scoring, persistence, color)
+src/                implementation; main.cpp builds the Qt app, ui/ holds widgets
 tests/              Catch2 unit tests (midi, geometry, scoring, types, persistence)
 tools/              drums_in MIDI debug utility
 third_party/        bundled RtMidi
@@ -113,5 +123,5 @@ docs/               design wireframe (index.html)
 ```
 
 The core logic lives in the `drumming_core` static library (shared between
-`drum_viz` and the test suite); `main.cpp`, `audio.cpp`, and `draw.cpp` make up
-the executable's UI and audio layer.
+`drum_viz` and the test suite) and is kept Qt-free; `main.cpp`, `controller.cpp`,
+`audio.cpp`, and the `ui/` widgets make up the executable's Qt UI and audio layer.
