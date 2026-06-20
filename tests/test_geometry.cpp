@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
-#include <SFML/System/Vector2.hpp>
+#include "drumming/color.h"
 #include "drumming/geometry.h"
 #include "drumming/constants.h"
 #include "drumming/types.h"
@@ -63,7 +63,7 @@ TEST_CASE("stepX - last step is half a cell from the right edge", "[geometry]") 
 
 // ── pickCell ──────────────────────────────────────────────────────────────────
 
-static sf::Vector2f pt(float x, float y) { return {x, y}; }
+static Vec2 pt(float x, float y) { return {x, y}; }
 
 // y sentinel values
 static constexpr float Y_ABOVE = STAFF_TOP_Y - 39.f;  // just above valid band
@@ -143,7 +143,7 @@ TEST_CASE("pickCell - total=8 and total=32 both resolve correctly", "[geometry]"
 // row banding (not nearest-notehead) for the voice axis.
 
 // Center of a given grid cell, for round-tripping.
-static sf::Vector2f gridCenter(int step, int vi, int total) {
+static Vec2 gridCenter(int step, int vi, int total) {
     float cw = (STAFF_RIGHT - STAFF_LEFT) / total;
     float x  = STAFF_LEFT + (step + 0.5f) * cw;
     float y  = GRID_TOP + (vi + 0.5f) * GRID_ROW_H;

@@ -1,5 +1,4 @@
 #pragma once
-#include <SFML/Graphics.hpp>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -8,6 +7,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "drumming/color.h"
 #include "drumming/constants.h"
 
 namespace drumming {
@@ -17,7 +17,7 @@ struct Voice {
     const char* name;
     float       yOff;   // pixels from STAFF_TOP_Y; negative = above staff
     bool        xHead;  // true = cymbal X-notehead
-    sf::Color   color;
+    Color       color;
 };
 
 inline constexpr int NUM_VOICES = 9;
