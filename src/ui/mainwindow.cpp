@@ -56,6 +56,7 @@ MainWindow::MainWindow(PracticeController& controller, QWidget* parent)
     bf.setBold(true);
     bf.setPointSize(bf.pointSize() + 4);
     brand->setFont(bf);
+    brand->setStyleSheet("color:#1c1c1e;");
     sbLay->addWidget(brand);
 
     auto* section = new QLabel("PRACTICE", sidebar);
@@ -70,8 +71,9 @@ MainWindow::MainWindow(PracticeController& controller, QWidget* parent)
         btn->setToolButtonStyle(Qt::ToolButtonTextOnly);
         btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         btn->setStyleSheet(
-            "QToolButton{border:none;text-align:left;padding:8px 10px;border-radius:6px;}"
-            "QToolButton:checked{background:#ffffff;border:1px solid #e6e6e8;}");
+            "QToolButton{border:none;text-align:left;padding:8px 10px;border-radius:6px;color:#1c1c1e;}"
+            "QToolButton:hover{background:#efeff0;}"
+            "QToolButton:checked{background:#ffffff;border:1px solid #e6e6e8;color:#1c1c1e;}");
         connect(btn, &QToolButton::clicked, &controller_, [this, target]() {
             controller_.setScreen(target);
         });
@@ -108,6 +110,7 @@ MainWindow::MainWindow(PracticeController& controller, QWidget* parent)
     htf.setPointSize(htf.pointSize() + 4);
     htf.setBold(true);
     headerTitle_->setFont(htf);
+    headerTitle_->setStyleSheet("color:#1c1c1e;");
     headerSub_ = new QLabel(header);
     headerSub_->setStyleSheet("color:#a3a3a8;");
     hLay->addWidget(headerTitle_);
