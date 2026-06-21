@@ -51,10 +51,13 @@ add_library(drumming_core STATIC
     src/scoring.cpp
     src/persistence.cpp
 )
-target_include_directories(drumming_core PUBLIC include)
+target_include_directories(drumming_core PUBLIC include ${SQLite3_INCLUDE_DIRS})
+# Link via SQLite3_LIBRARIES rather than the SQLite3::SQLite3 imported target:
+# some platforms' FindSQLite3 reports the package found without creating the
+# imported target, which breaks the build at generate time.
 target_link_libraries(drumming_core PUBLIC
     rtmidi
-    SQLite3::SQLite3
+    ${SQLite3_LIBRARIES}
 )
 
 # ── drum_viz ─────────────────────────────────────────────────────────────────
