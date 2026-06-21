@@ -1,4 +1,5 @@
 #pragma once
+#include <QTransform>
 #include <QWidget>
 
 class QSpinBox;
@@ -24,6 +25,11 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
 
 private:
+    // Maps the fixed virtual layout rectangle (the absolute coordinates the
+    // draw helpers and pick* geometry use) onto the widget's actual size,
+    // scaled uniformly and centred so the staff + grid fill the window.
+    QTransform contentTransform() const;
+
     PracticeController& controller_;
 };
 

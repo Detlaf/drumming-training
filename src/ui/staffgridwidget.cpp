@@ -241,13 +241,36 @@ static void drawGrid(QPainter& p, const App& app, int total) {
                  STAFF_LEFT + s * cellW + cellW / 2.f - 3.f, numY, 9, INK3);
 }
 
+// ── Virtual layout bounds ─────────────────────────────────────────────────────
+// The draw helpers and pick* geometry work in the original absolute window
+// coordinates. These are the bounds of everything they paint; contentTransform()
+// scales this rectangle to fill the actual widget.
+namespace {
+constexpr float V_LEFT   = SIDEBAR_W + 6.f;                            // 216
+constexpr float V_RIGHT  = static_cast<float>(WINDOW_W) - 8.f;         // 1192
+constexpr float V_TOP    = STAFF_CARD_Y - 4.f;                         // 92
+constexpr float V_BOTTOM = GRID_TOP + NUM_VOICES * GRID_ROW_H + 20.f;  // 622
+} // namespace
+
 // ── StaffCanvas ───────────────────────────────────────────────────────────────
 StaffCanvas::StaffCanvas(PracticeController& controller, QWidget* parent)
     : QWidget(parent), controller_(controller) {
-    // Minimum size keeps the painted layout (in absolute coordinates) fully
-    // visible; the surrounding stacked widget supplies the rest of the chrome.
-    setMinimumSize(static_cast<int>(STAFF_RIGHT) + 16,
-                   static_cast<int>(GRID_TOP + NUM_VOICES * GRID_ROW_H + 28.f));
+    // Drawing is scaled to fit, so a modest minimum is enough to keep things
+    // legible while still letting the canvas grow to fill the window.
+    setMinimumSize(560, 360);
+}
+
+QTransform StaffCanvas::contentTransform() const {
+    const float vw = V_RIGHT - V_LEFT;
+    const float vh = V_BOTTOM - V_TOP;
+    const float s  = std::min(width() / vw, height() / vh);
+    const float tx = (width() - vw * s) / 2.f - V_LEFT * s;
+    const float ty = (height() - vh * s) / 2.f - V_TOP * s;
+
+    QTransform t;
+    t.translate(tx, ty);
+    t.scale(s, s);
+    return t;
 }
 
 void StaffCanvas::paintEvent(QPaintEvent*) {
@@ -258,6 +281,7 @@ void StaffCanvas::paintEvent(QPaintEvent*) {
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
     p.fillRect(rect(), BG2);
+    p.setWorldTransform(contentTransform());
 
     // Card backgrounds (port of drawPracticeView ~360–373)
     fillRect(p, CARD_X, STAFF_CARD_Y, CARD_W, STAFF_CARD_H, BG);
@@ -284,8 +308,11 @@ void StaffCanvas::mousePressEvent(QMouseEvent* event) {
     const App& app = controller_.app();
     if (app.screen != Screen::EDITOR) return;
 
-    float mx = static_cast<float>(event->position().x());
-    float my = static_cast<float>(event->position().y());
+    // Map the click back through the paint transform so the retained absolute
+    // pick* geometry still applies.
+    QPointF local = contentTransform().inverted().map(event->position());
+    float mx = static_cast<float>(local.x());
+    float my = static_cast<float>(local.y());
 
     // Reuse the retained core geometry (port of main.cpp ~321–333): try the grid
     // sequencer first, then fall back to the staff.
