@@ -20,6 +20,7 @@ jobs:
           clang-tidy \
           libasound2-dev \
           libudev-dev \
+          libsqlite3-dev \
           qt6-base-dev \
           qt6-multimedia-dev
 
