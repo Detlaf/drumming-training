@@ -59,9 +59,11 @@ StatsView::StatsView(PracticeController& controller, QWidget* parent)
     root->setSpacing(14);
 
     auto* cards = new QHBoxLayout();
-    cards->addWidget(makeCard("Total time played", totalTime_, this));
-    cards->addWidget(makeCard("Sessions played",   sessions_,  this));
-    cards->addWidget(makeCard("Average accuracy",  avgAcc_,    this));
+    cards->addWidget(makeCard("Total time played", totalTime_,  this));
+    cards->addWidget(makeCard("Sessions played",   sessions_,   this));
+    cards->addWidget(makeCard("Average accuracy",  avgAcc_,     this));
+    cards->addWidget(makeCard("Correct pad hits",  correctPad_, this));
+    cards->addWidget(makeCard("On-time hits",      onTime_,     this));
     root->addLayout(cards);
 
     // ── Time-played-per-day chart with a period selector ─────────────────────
@@ -87,9 +89,10 @@ StatsView::StatsView(PracticeController& controller, QWidget* parent)
     root->addWidget(chart_);
 
     table_ = new QTableWidget(this);
-    table_->setColumnCount(5);
+    table_->setColumnCount(7);
     table_->setHorizontalHeaderLabels(
-        {"Date / Groove", "Sessions", "BPM", "Duration", "Accuracy"});
+        {"Date / Groove", "Sessions", "BPM", "Duration", "Accuracy",
+         "Correct pad", "On-time"});
     table_->horizontalHeader()->setStretchLastSection(true);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     table_->verticalHeader()->setVisible(false);
@@ -106,9 +109,14 @@ void StatsView::refresh() {
     int   totalSessions = static_cast<int>(app.history.size());
     float totalTimeSec  = 0.f, totalAcc = 0.f;
     int   accCount      = 0;
+    // Hit-quality tallies pooled across every session.
+    long long totalNotes = 0, padCorrect = 0, onTime = 0;
     for (const auto& s : app.history) {
         totalTimeSec += static_cast<float>(s.durationSecs);
         if (s.totalNotes > 0) { totalAcc += s.accuracyPct; ++accCount; }
+        totalNotes += s.totalNotes;
+        padCorrect += s.totalNotes - s.wrongPadHits;       // right pad, any timing
+        onTime     += s.correctHits;                        // right pad, on time
     }
     int totalMin  = static_cast<int>(totalTimeSec / 60.f);
     int avgAccPct = accCount > 0 ? static_cast<int>(totalAcc / accCount) : 0;
@@ -116,6 +124,13 @@ void StatsView::refresh() {
     totalTime_->setText(QString("%1h %2m").arg(totalMin / 60).arg(totalMin % 60));
     sessions_->setText(QString::number(totalSessions));
     avgAcc_->setText(QString("%1%").arg(avgAccPct));
+
+    // % of hits that landed on the correct pad (regardless of timing).
+    correctPad_->setText(
+        totalNotes > 0 ? QString("%1%").arg(padCorrect * 100 / totalNotes) : "—");
+    // % of correct-pad hits that were on time (isolates timing from pad accuracy).
+    onTime_->setText(
+        padCorrect > 0 ? QString("%1%").arg(onTime * 100 / padCorrect) : "—");
 
     refreshChart();
 
@@ -125,6 +140,7 @@ void StatsView::refresh() {
         float accSum = 0.f;
         int accN = 0, bpm = 0;
         bool bpmUniform = true;
+        long long notes = 0, padCorrect = 0, onTime = 0;
     };
     std::map<long long, std::map<std::string, Agg>> byDay;
     for (const auto& s : app.history) {
@@ -132,6 +148,9 @@ void StatsView::refresh() {
         a.count += 1;
         a.dur   += s.durationSecs;
         if (s.totalNotes > 0) { a.accSum += s.accuracyPct; ++a.accN; }
+        a.notes      += s.totalNotes;
+        a.padCorrect += s.totalNotes - s.wrongPadHits;
+        a.onTime     += s.correctHits;
         if (a.count == 1) a.bpm = s.bpm;
         else if (a.bpm != s.bpm) a.bpmUniform = false;
     }
@@ -146,21 +165,28 @@ void StatsView::refresh() {
         hf.setBold(true);
         hdr->setFont(hf);
         table_->setItem(hr, 0, hdr);
-        table_->setSpan(hr, 0, 1, 5);
+        table_->setSpan(hr, 0, 1, 7);
 
         for (const auto& [groove, a] : dit->second) {
             int r = table_->rowCount();
             table_->insertRow(r);
+            // Center every numeric column; leave the groove name left-aligned.
+            auto centered = [&](int col, const QString& text) {
+                auto* it = new QTableWidgetItem(text);
+                it->setTextAlignment(Qt::AlignCenter);
+                table_->setItem(r, col, it);
+            };
             table_->setItem(r, 0, new QTableWidgetItem(
                 "    " + QString::fromStdString(groove)));
-            table_->setItem(r, 1, new QTableWidgetItem(QString::number(a.count)));
-            table_->setItem(r, 2, new QTableWidgetItem(
-                a.bpmUniform ? QString::number(a.bpm) : "—"));
-            table_->setItem(r, 3, new QTableWidgetItem(
-                QString::asprintf("%d:%02d", a.dur / 60, a.dur % 60)));
+            centered(1, QString::number(a.count));
+            centered(2, a.bpmUniform ? QString::number(a.bpm) : "—");
+            centered(3, QString::asprintf("%d:%02d", a.dur / 60, a.dur % 60));
             int avg = a.accN > 0 ? static_cast<int>(a.accSum / a.accN) : 0;
-            table_->setItem(r, 4, new QTableWidgetItem(
-                a.accN > 0 ? QString("%1%").arg(avg) : "—"));
+            centered(4, a.accN > 0 ? QString("%1%").arg(avg) : "—");
+            centered(5, a.notes > 0
+                          ? QString("%1%").arg(a.padCorrect * 100 / a.notes) : "—");
+            centered(6, a.padCorrect > 0
+                          ? QString("%1%").arg(a.onTime * 100 / a.padCorrect) : "—");
         }
     }
 }
