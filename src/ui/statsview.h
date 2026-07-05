@@ -28,6 +28,8 @@ private:
     QLabel*             totalTime_  = nullptr;
     QLabel*             sessions_   = nullptr;
     QLabel*             avgAcc_     = nullptr;
+    QLabel*             correctPad_ = nullptr;
+    QLabel*             onTime_     = nullptr;
     QComboBox*          period_     = nullptr;
     DailyTimeChart*     chart_      = nullptr;
     QTableWidget*       table_      = nullptr;
