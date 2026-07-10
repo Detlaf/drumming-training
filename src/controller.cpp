@@ -166,6 +166,26 @@ void PracticeController::deleteGroove(int index) {
     emit grooveChanged();
 }
 
+void PracticeController::renameGroove(int index, const QString& name) {
+    if (index < 0 || index >= static_cast<int>(app_.library.size())) return;
+    std::string n = name.trimmed().toStdString();
+    if (n.empty()) return;
+
+    auto& sg = app_.library[index];
+    if (sg.name == n) return;
+
+    // Reject a rename that would collide with another saved groove's name.
+    for (int i = 0; i < static_cast<int>(app_.library.size()); ++i) {
+        if (i != index && app_.library[i].name == n) return;
+    }
+
+    if (app_.currentGrooveName == sg.name)
+        app_.currentGrooveName = n;
+    sg.name = n;
+    saveGrooves(app_);
+    emit grooveChanged();
+}
+
 void PracticeController::resumeLast() {
     if (app_.library.empty()) return;
     loadGroove(static_cast<int>(app_.library.size()) - 1);

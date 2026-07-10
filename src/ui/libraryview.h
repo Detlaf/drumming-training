@@ -19,6 +19,9 @@ public:
     void refresh();
 
 private:
+    // Pop up an inline dialog to rename the groove at `index`.
+    void promptRename(int index);
+
     PracticeController& controller_;
     QListWidget*        list_ = nullptr;
 };
