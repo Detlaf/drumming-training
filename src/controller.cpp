@@ -26,6 +26,38 @@ std::string PracticeController::defaultDatabasePath() {
     return (dir / "drumming.db").string();
 }
 
+std::string PracticeController::diagnosticLogPath() {
+    const char* home = std::getenv("HOME");
+    std::filesystem::path dir =
+        (home != nullptr ? std::filesystem::path(home) : std::filesystem::path("."))
+        / "Library" / "Application Support" / "Drumming" / "diagnostics";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::time_t t = std::time(nullptr);
+    std::tm     tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char stamp[32];
+    std::strftime(stamp, sizeof(stamp), "diag-%Y%m%d-%H%M%S.log", &tm);
+    return (dir / stamp).string();
+}
+
+void PracticeController::beginDiagnosticCapture() {
+    if (!diagnosticsEnabled_ || diagLogger_.isActive()) return;
+    DiagSessionMeta meta{static_cast<long long>(std::time(nullptr)),
+                         app_.bpm, app_.measures, app_.totalSteps(),
+                         app_.stepDurMs(), app_.currentGrooveName, app_.groove};
+    if (!diagLogger_.start(diagnosticLogPath(), meta)) {
+        std::cerr << "diagnostics: cannot open log file — disabling capture\n";
+        diagnosticsEnabled_ = false;
+        return;
+    }
+    diagLogger_.logLifecycle(LifecycleKind::PlayStart, 0.0f, 0);
+}
+
 PracticeController::PracticeController(QObject* parent) : QObject(parent) {
     // MIDI — optional; the app still works without a kit.
     midiIn_ = std::make_unique<RtMidiIn>();
@@ -78,6 +110,7 @@ void PracticeController::enterPlay() {
     app_.sessionActive = false;
     app_.playStart     = Clock::now();
     app_.sessionStart  = app_.playStart;
+    beginDiagnosticCapture();
     emit screenChanged(app_.screen);
 }
 
@@ -93,6 +126,12 @@ void PracticeController::togglePlay() {
         break;
     case Screen::PLAY:
         endSession();
+        if (diagLogger_.isActive()) {
+            float ms = std::chrono::duration<float, std::milli>(
+                           Clock::now() - app_.playStart).count();
+            diagLogger_.logLifecycle(LifecycleKind::PlayStop, ms, app_.loopCount);
+            diagLogger_.stop();
+        }
         app_.screen      = Screen::EDITOR;
         app_.currentStep = -1;
         emit screenChanged(app_.screen);
@@ -232,6 +271,16 @@ void PracticeController::toggleSession() {
     else                    startSession();
 }
 
+void PracticeController::setDiagnosticsEnabled(bool enabled) {
+    diagnosticsEnabled_ = enabled;
+    if (enabled) {
+        // If we're already playing, start capturing right away.
+        if (app_.screen == Screen::PLAY) beginDiagnosticCapture();
+    } else {
+        diagLogger_.stop();
+    }
+}
+
 // ── Timer slots (ported from the SFML poll loop) ──────────────────────────────
 
 void PracticeController::pollMidiTick() {
@@ -246,6 +295,9 @@ void PracticeController::pollMidiTick() {
                            ev.time - app_.playStart).count();
             HitResult hr = scoreHit(ms, app_.groove, vi, app_.totalSteps(), app_.stepDurMs());
             app_.results.push_back(hr);
+
+            if (diagLogger_.isActive())
+                diagLogger_.logHit(makeHitLogEntry(ms, ev, hr, app_.sessionActive));
 
             // Accumulate session statistics while a session is running.
             if (app_.sessionActive) {
@@ -295,6 +347,11 @@ void PracticeController::playTick() {
     if (loop > app_.loopCount) {
         app_.loopCount = loop;
         app_.results.clear();  // live strip shows the current loop only
+        if (diagLogger_.isActive()) {
+            float loopMs = std::chrono::duration<float, std::milli>(
+                               Clock::now() - app_.playStart).count();
+            diagLogger_.logLifecycle(LifecycleKind::Loop, loopMs, loop);
+        }
     }
     app_.currentStep = step;
 

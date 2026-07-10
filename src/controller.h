@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include "audio.h"
+#include "drumming/diagnostic_logger.h"
 #include "drumming/types.h"
 
 class QTimer;
@@ -31,6 +32,7 @@ public:
     // loadHistory against it at startup.
     App&       app()       { return app_; }
     const App& app() const { return app_; }
+    bool diagnosticsEnabled() const { return diagnosticsEnabled_; }
 
 public slots:
     // Screen navigation (sidebar buttons, Home cards, Esc-to-Home).
@@ -59,6 +61,9 @@ public slots:
     void endSession();
     void toggleSession();
 
+    // Diagnostics capture toggle (Play-screen control).
+    void setDiagnosticsEnabled(bool enabled);
+
 signals:
     void screenChanged(Screen screen);
     void grooveChanged();
@@ -73,10 +78,16 @@ private slots:
 
 private:
     void enterPlay();
+    // Opens a fresh timestamped capture file if diagnostics are enabled.
+    void beginDiagnosticCapture();
+    // Path like ~/Library/Application Support/Drumming/diagnostics/diag-YYYYMMDD-HHMMSS.log
+    static std::string diagnosticLogPath();
 
     App                       app_;
     Metronome                 metronome_;
     std::unique_ptr<RtMidiIn> midiIn_;
+    DiagnosticLogger diagLogger_;
+    bool             diagnosticsEnabled_ = false;
 
     QTimer* playTimer_    = nullptr;
     QTimer* midiTimer_    = nullptr;
