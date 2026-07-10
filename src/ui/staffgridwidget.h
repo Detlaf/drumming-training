@@ -5,6 +5,7 @@
 class QSpinBox;
 class QPushButton;
 class QLabel;
+class QCheckBox;
 
 namespace drumming {
 
@@ -58,6 +59,7 @@ private:
     QSpinBox*           measuresSpin_ = nullptr;
     QPushButton*        playBtn_     = nullptr;
     QPushButton*        sessionBtn_  = nullptr;
+    QCheckBox*          diagCheck_   = nullptr;
     QLabel*             accuracyLabel_ = nullptr;
     bool                syncing_     = false;
 };

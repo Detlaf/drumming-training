@@ -5,6 +5,7 @@
 #include "drumming/geometry.h"
 #include "drumming/types.h"
 
+#include <QCheckBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -13,6 +14,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QString>
 #include <QVBoxLayout>
@@ -378,6 +380,12 @@ StaffGridWidget::StaffGridWidget(PracticeController& controller, QWidget* parent
     connect(sessionBtn_, &QPushButton::clicked, &controller_, &PracticeController::toggleSession);
     row->addWidget(sessionBtn_);
 
+    diagCheck_ = new QCheckBox("Diagnostics", strip);
+    diagCheck_->setToolTip("Capture a JSONL scoring log for this Play session");
+    connect(diagCheck_, &QCheckBox::toggled, &controller_,
+            &PracticeController::setDiagnosticsEnabled);
+    row->addWidget(diagCheck_);
+
     root->addWidget(strip, 0);
 
     syncControls();
@@ -393,6 +401,12 @@ void StaffGridWidget::syncControls() {
     bool playing = (app.screen == Screen::PLAY);
     playBtn_->setText(playing ? "Stop" : "Play");
     sessionBtn_->setVisible(playing);
+    diagCheck_->setVisible(playing);
+    // Reflect controller state (e.g. auto-disabled on file-open failure).
+    if (diagCheck_->isChecked() != controller_.diagnosticsEnabled()) {
+        QSignalBlocker block(diagCheck_);
+        diagCheck_->setChecked(controller_.diagnosticsEnabled());
+    }
     sessionBtn_->setText(app.sessionActive ? "Stop session" : "Start session");
 
     // Live accuracy summary (port of drawControls ~326–354).
