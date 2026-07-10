@@ -49,6 +49,7 @@ add_library(drumming_core STATIC
     src/types.cpp
     src/geometry.cpp
     src/scoring.cpp
+    src/diagnostic_logger.cpp
     src/persistence.cpp
 )
 target_include_directories(drumming_core PUBLIC include ${SQLite3_INCLUDE_DIRS})
@@ -127,6 +128,7 @@ add_executable(drumming_tests
     tests/test_midi.cpp
     tests/test_geometry.cpp
     tests/test_scoring.cpp
+    tests/test_diagnostic_logger.cpp
     tests/test_types.cpp
     tests/test_persistence.cpp
 )
