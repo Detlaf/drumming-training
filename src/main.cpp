@@ -17,11 +17,15 @@ int main(int argc, char* argv[]) {
     drumming::setDatabasePath(drumming::PracticeController::defaultDatabasePath());
 
     drumming::PracticeController controller;
-    drumming::MainWindow window(controller);
 
-    // Load persisted state into the controller's App before the window paints.
+    // Load persisted state into the controller's App before the window is built,
+    // so the views paint the saved library on first construction. (Building the
+    // window runs an initial refresh; if grooves loaded afterward, the default
+    // Home screen would stay stuck showing "No grooves saved yet.")
     drumming::loadGrooves(controller.app());
     drumming::loadHistory(controller.app());
+
+    drumming::MainWindow window(controller);
 
     // Flush any in-progress practice session when the app quits (ports the old
     // SFML close handler at main.cpp:136). endSession is a no-op when no session
