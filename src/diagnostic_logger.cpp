@@ -1,5 +1,6 @@
 #include "drumming/diagnostic_logger.h"
 #include <ctime>
+#include <locale>
 
 namespace drumming {
 
@@ -73,6 +74,7 @@ bool DiagnosticLogger::start(const std::string& path, const DiagSessionMeta& met
     if (out_.is_open()) out_.close();
     out_.open(path, std::ios::out | std::ios::trunc);
     if (!out_.is_open()) return false;
+    out_.imbue(std::locale::classic());
 
     const std::string name = jsonEscape(meta.grooveName.empty() ? "<unsaved>" : meta.grooveName);
     out_ << "{\"type\":\"session\""

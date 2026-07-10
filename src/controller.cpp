@@ -281,7 +281,7 @@ void PracticeController::setDiagnosticsEnabled(bool enabled) {
         // If we're already playing, start capturing right away.
         if (app_.screen == Screen::PLAY) beginDiagnosticCapture();
     } else {
-        diagLogger_.stop();
+        endDiagnosticCapture();
     }
 }
 

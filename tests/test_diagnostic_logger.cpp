@@ -69,6 +69,19 @@ TEST_CASE("start writes one session header line with groove context", "[diag]") 
     std::filesystem::remove(path);
 }
 
+TEST_CASE("start writes stepDurMs with a dot decimal separator regardless of global locale", "[diag]") {
+    std::string path = tempLogPath("locale");
+    DiagSessionMeta meta{1720000000LL, 100, 2, 32, 93.75f, "Funk 1", {{4, 0}, {8, 3}}};
+    DiagnosticLogger log;
+    REQUIRE(log.start(path, meta));
+    log.stop();
+
+    auto lines = readLines(path);
+    REQUIRE(lines.size() == 1);
+    CHECK(lines[0].find("\"stepDurMs\":93.75") != std::string::npos);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("empty groove name serializes as <unsaved>", "[diag]") {
     std::string path = tempLogPath("unsaved");
     DiagSessionMeta meta{1720000000LL, 100, 1, 16, 93.75f, "", {}};
