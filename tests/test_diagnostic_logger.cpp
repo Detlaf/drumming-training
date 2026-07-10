@@ -119,6 +119,20 @@ TEST_CASE("logLifecycle writes typed timeline lines", "[diag]") {
     std::filesystem::remove(path);
 }
 
+TEST_CASE("start escapes quotes and backslashes in groove name", "[diag]") {
+    std::string path = tempLogPath("escape");
+    DiagSessionMeta meta{1720000000LL, 100, 1, 16, 93.75f, "Funk \"1\"\\path", {}};
+    DiagnosticLogger log;
+    REQUIRE(log.start(path, meta));
+    log.stop();
+
+    auto lines = readLines(path);
+    REQUIRE(lines.size() == 1);
+    // The raw line must contain the escaped sequences, not bare quotes/backslashes.
+    CHECK(lines[0].find("\"name\":\"Funk \\\"1\\\"\\\\path\"") != std::string::npos);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("start on an unwritable path returns false and stays inactive", "[diag]") {
     DiagSessionMeta meta{1720000000LL, 100, 2, 32, 93.75f, "G", {}};
     DiagnosticLogger log;

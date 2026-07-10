@@ -42,6 +42,31 @@ const char* lifecycleName(LifecycleKind kind) {
     }
     return "unknown";
 }
+
+// Escapes a string for safe embedding inside a JSON string literal.
+std::string jsonEscape(const std::string& s) {
+    static const char* hexDigits = "0123456789abcdef";
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        switch (c) {
+        case '"':  out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n";  break;
+        case '\r': out += "\\r";  break;
+        case '\t': out += "\\t";  break;
+        default:
+            if (c < 0x20) {
+                out += "\\u00";
+                out += hexDigits[(c >> 4) & 0xF];
+                out += hexDigits[c & 0xF];
+            } else {
+                out += static_cast<char>(c);
+            }
+        }
+    }
+    return out;
+}
 } // namespace
 
 bool DiagnosticLogger::start(const std::string& path, const DiagSessionMeta& meta) {
@@ -49,7 +74,7 @@ bool DiagnosticLogger::start(const std::string& path, const DiagSessionMeta& met
     out_.open(path, std::ios::out | std::ios::trunc);
     if (!out_.is_open()) return false;
 
-    const std::string name = meta.grooveName.empty() ? "<unsaved>" : meta.grooveName;
+    const std::string name = jsonEscape(meta.grooveName.empty() ? "<unsaved>" : meta.grooveName);
     out_ << "{\"type\":\"session\""
          << ",\"startedAt\":\"" << isoUtc(meta.startedAtEpoch) << "\""
          << ",\"groove\":{\"bpm\":" << meta.bpm
