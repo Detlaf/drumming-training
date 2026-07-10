@@ -80,6 +80,8 @@ private:
     void enterPlay();
     // Opens a fresh timestamped capture file if diagnostics are enabled.
     void beginDiagnosticCapture();
+    // Writes the playStop lifecycle line and closes the capture file, if active.
+    void endDiagnosticCapture();
     // Path like ~/Library/Application Support/Drumming/diagnostics/diag-YYYYMMDD-HHMMSS.log
     static std::string diagnosticLogPath();
 

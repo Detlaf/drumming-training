@@ -58,6 +58,14 @@ void PracticeController::beginDiagnosticCapture() {
     diagLogger_.logLifecycle(LifecycleKind::PlayStart, 0.0f, 0);
 }
 
+void PracticeController::endDiagnosticCapture() {
+    if (!diagLogger_.isActive()) return;
+    float ms = std::chrono::duration<float, std::milli>(
+                   Clock::now() - app_.playStart).count();
+    diagLogger_.logLifecycle(LifecycleKind::PlayStop, ms, app_.loopCount);
+    diagLogger_.stop();
+}
+
 PracticeController::PracticeController(QObject* parent) : QObject(parent) {
     // MIDI — optional; the app still works without a kit.
     midiIn_ = std::make_unique<RtMidiIn>();
@@ -97,6 +105,7 @@ PracticeController::~PracticeController() = default;
 
 void PracticeController::setScreen(Screen screen) {
     if (app_.screen == screen) return;
+    if (app_.screen == Screen::PLAY && screen != Screen::PLAY) endDiagnosticCapture();
     app_.screen = screen;
     emit screenChanged(screen);
 }
@@ -126,12 +135,7 @@ void PracticeController::togglePlay() {
         break;
     case Screen::PLAY:
         endSession();
-        if (diagLogger_.isActive()) {
-            float ms = std::chrono::duration<float, std::milli>(
-                           Clock::now() - app_.playStart).count();
-            diagLogger_.logLifecycle(LifecycleKind::PlayStop, ms, app_.loopCount);
-            diagLogger_.stop();
-        }
+        endDiagnosticCapture();
         app_.screen      = Screen::EDITOR;
         app_.currentStep = -1;
         emit screenChanged(app_.screen);
