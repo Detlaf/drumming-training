@@ -3,10 +3,13 @@
 #include "drumming/types.h"
 
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QStyle>
 #include <QVBoxLayout>
 #include <QString>
 
@@ -69,6 +72,14 @@ void LibraryView::refresh() {
             label->setStyleSheet("font-weight: bold;");
         row->addWidget(label, 1);
 
+        auto* editBtn = new QPushButton("✎", rowWidget);
+        editBtn->setToolTip("Rename groove");
+        editBtn->setFixedWidth(32);
+        connect(editBtn, &QPushButton::clicked, this, [this, i]() {
+            promptRename(i);
+        });
+        row->addWidget(editBtn);
+
         auto* openBtn = new QPushButton("Open", rowWidget);
         connect(openBtn, &QPushButton::clicked, this, [this, i]() {
             controller_.loadGroove(i);
@@ -84,6 +95,18 @@ void LibraryView::refresh() {
         item->setSizeHint(rowWidget->sizeHint());
         list_->setItemWidget(item, rowWidget);
     }
+}
+
+void LibraryView::promptRename(int index) {
+    const App& app = controller_.app();
+    if (index < 0 || index >= static_cast<int>(app.library.size())) return;
+
+    const QString current = QString::fromStdString(app.library[index].name);
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+        this, "Rename groove", "New name:", QLineEdit::Normal, current, &ok);
+    if (ok && !name.trimmed().isEmpty())
+        controller_.renameGroove(index, name);
 }
 
 } // namespace drumming

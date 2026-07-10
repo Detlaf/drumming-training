@@ -49,6 +49,7 @@ public slots:
     void newGroove();
     void loadGroove(int index);
     void deleteGroove(int index);
+    void renameGroove(int index, const QString& name);
     void resumeLast();
 
     // Save the current groove under `name` (find-by-name or append), then persist.
