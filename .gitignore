@@ -69,6 +69,7 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+.fastembed_cache/
 
 # SQLite database
 *.db
