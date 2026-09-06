@@ -165,6 +165,30 @@ TEST_CASE("scoreHit - hit on a pad with no groove note is WrongPad", "[scoring]"
     CHECK_FALSE(r.correct);
 }
 
+TEST_CASE("scoreHit - a same-voice note too far from the hit's actual position is not matched", "[scoring]") {
+    const float dur = 150.f;
+    // Groove has voice 7 at step 0 and step 8 (16-step loop). A hit 700ms in
+    // sits nearest to grid step 5 -- 5 steps from step 0's note and 3 steps
+    // from step 8's, both farther than MAX_MATCH_STEPS. It must not be
+    // silently reassigned to either distant note.
+    std::set<std::pair<int, int>> groove = {{0, 7}, {8, 7}};
+    HitResult r = scoreHit(700.f, groove, 7, 16, dur);
+    CHECK(r.step == 5);
+    CHECK(r.cls  == HitClass::WrongPad);
+    CHECK_FALSE(r.correct);
+}
+
+TEST_CASE("scoreHit - same-voice matching still reaches across a couple of steps", "[scoring]") {
+    const float dur = 150.f;
+    // The note sits MAX_MATCH_STEPS away from the hit's actual grid position --
+    // still within the cap, so it's picked up as a (very) late hit rather than
+    // falling back to WrongPad.
+    std::set<std::pair<int, int>> groove = {{0, 7}};
+    HitResult r = scoreHit(2 * dur, groove, 7, 16, dur);
+    CHECK(r.step == 0);
+    CHECK(r.cls  == HitClass::LateCorrectPad);
+}
+
 TEST_CASE("scoreHit - unrecognized pad (voice -1) is WrongPad", "[scoring]") {
     const float dur = 125.f;
     HitResult r = scoreHit(4 * dur, grooveAt(4, 5), -1, 16, dur);

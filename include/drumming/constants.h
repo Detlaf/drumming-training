@@ -33,6 +33,15 @@ inline constexpr int   BEATS_PER_MEASURE = 4;
 inline constexpr int   STEPS_PER_MEASURE = STEPS_PER_BEAT * BEATS_PER_MEASURE;
 inline constexpr float HIT_WINDOW_MS     = 80.f;
 
+// How many grid steps a same-voice groove note may be matched across. Scoring
+// matches a hit against the nearest note *of the same voice* (see scoring.cpp)
+// so mistiming doesn't misclassify a hit as wrong-pad; but without a cap, a
+// large timing error can make a distant, unintended note of that voice appear
+// nearer in raw time than the one actually played, silently reassigning the
+// hit to the wrong beat. Capping the search to nearby steps keeps the
+// mistimed-hit handling while ruling that out.
+inline constexpr int   MAX_MATCH_STEPS   = 2;
+
 // Cross-talk gate. Electronic-kit triggers pick up vibration from neighbouring
 // pads (and the hi-hat pedal), firing faint phantom note-ons — most visibly a
 // ghost hi-hat hit whenever a tom or the snare is struck. Reject note-ons below

@@ -32,6 +32,14 @@ HitResult scoreHit(float ms,
     float bestOffset = 0.f;
     for (const auto& [s, v] : groove) {
         if (v != voice) continue;
+        // Only trust the same-voice match to notes within MAX_MATCH_STEPS of
+        // where the hit actually landed on the grid. Without this cap, a large
+        // timing error can leave a distant, unintended note of this voice
+        // closer in raw time than the one actually played, silently
+        // reassigning the hit to the wrong beat.
+        int stepDist = std::abs(s - nearest);
+        stepDist     = std::min(stepDist, totalSteps - stepDist);
+        if (stepDist > MAX_MATCH_STEPS) continue;
         // Signed distance hit-minus-note, wrapped into [-loopMs/2, loopMs/2) so a
         // hit just before the downbeat matches the note at the start of the bar.
         float d = wrapped - (float)s * stepDurMs;
